@@ -119,12 +119,12 @@ function JournalWorkspace() {
   const [mobileSide, setMobileSide] = useState<'left' | 'right'>('left');
   const [welcomeDismissed, setWelcomeDismissed] = useState<boolean>(false);
 
-  // Logged-in users open straight into their synced journals when book is closed
+  // Logged-in users go straight into their clean synced journal
   useEffect(() => {
-    if (authReady && user && bookPhase === 'closed' && !welcomeDismissed) {
+    if (authReady && user && !welcomeDismissed) {
       setWelcomeDismissed(true);
     }
-  }, [authReady, bookPhase, user, welcomeDismissed]);
+  }, [authReady, user, welcomeDismissed]);
 
   const handleDismissWelcome = useCallback(() => {
     setWelcomeDismissed(true);

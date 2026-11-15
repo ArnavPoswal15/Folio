@@ -1,5 +1,9 @@
 import 'dotenv/config';
-import { GoogleGenAI, type GenerateContentResponse } from '@google/genai';
+import {
+  GoogleGenAI,
+  ThinkingLevel,
+  type GenerateContentResponse,
+} from '@google/genai';
 import express, { type Request, type Response } from 'express';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -589,6 +593,8 @@ function logTranscribeAudit(entry: {
   bytes?: number;
   durationSec?: number;
   model?: string;
+  primaryMs?: number;
+  fallbackMs?: number;
   latencyMs: number;
   outcome: string;
 }) {
@@ -642,6 +648,80 @@ function cleanTranscriptText(raw: string): string {
   return text;
 }
 
+const MIME_EXTENSION_MAP: Record<string, string> = {
+  'audio/wav': 'wav',
+  'audio/webm': 'webm',
+  'audio/ogg': 'ogg',
+  'audio/mp4': 'm4a',
+  'audio/mpeg': 'mp3',
+  'audio/flac': 'flac',
+  'audio/aac': 'm4a',
+};
+
+const GROQ_TRANSCRIBE_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
+
+interface GroqVerboseSegment {
+  no_speech_prob?: number;
+  avg_logprob?: number;
+}
+
+async function transcribeWithGroq(
+  audio: ValidatedAudio,
+  apiKey: string
+): Promise<string> {
+  const model =
+    process.env.GROQ_TRANSCRIBE_MODEL?.trim() || 'whisper-large-v3-turbo';
+  const ext = MIME_EXTENSION_MAP[audio.mimeType] ?? 'webm';
+
+  const form = new FormData();
+  form.append(
+    'file',
+    new Blob([new Uint8Array(audio.buffer)], { type: audio.mimeType }),
+    `recording.${ext}`
+  );
+  form.append('model', model);
+  form.append('response_format', 'verbose_json');
+  form.append('temperature', '0');
+
+  const response = await fetch(GROQ_TRANSCRIBE_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: form,
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!response.ok) {
+    const bodyText = await response.text().catch(() => '');
+    const err = new Error(
+      `Groq API error (${response.status}): ${bodyText.slice(0, 200)}`
+    );
+    (err as Error & { status?: number }).status = response.status;
+    throw err;
+  }
+
+  const data = (await response.json()) as {
+    text?: unknown;
+    segments?: unknown;
+  };
+
+  if (Array.isArray(data.segments) && data.segments.length > 0) {
+    const allSilent = data.segments.every((seg) => {
+      const s = seg as GroqVerboseSegment;
+      return (
+        typeof s.no_speech_prob === 'number' &&
+        s.no_speech_prob >= 0.9 &&
+        typeof s.avg_logprob === 'number' &&
+        s.avg_logprob < -1.0
+      );
+    });
+    if (allSilent) return '';
+  }
+
+  return cleanTranscriptText(typeof data.text === 'string' ? data.text : '');
+}
+
 async function startServer() {
   const app = express();
   app.set('trust proxy', 1);
@@ -656,12 +736,15 @@ async function startServer() {
   });
 
   app.get('/api/health', (_req: Request, res: Response) => {
+    const hasGroq = Boolean(process.env.GROQ_API_KEY?.trim());
+    const hasGemini = Boolean(process.env.GEMINI_API_KEY?.trim());
     res.json({
       status: 'ok',
       service: 'folio',
       uptimeSec: Math.floor((Date.now() - SERVER_START_MS) / 1000),
       authRequired: REQUIRE_TRANSCRIBE_AUTH,
-      transcriptionConfigured: Boolean(process.env.GEMINI_API_KEY?.trim()),
+      transcriptionConfigured: hasGroq || hasGemini,
+      transcriptionProvider: hasGroq ? 'groq' : hasGemini ? 'gemini' : 'none',
     });
   });
 
@@ -852,9 +935,10 @@ async function startServer() {
           return;
         }
 
-        // 5. Verify Gemini client availability before charging quota
+        // 5. Verify transcription provider availability before charging quota
+        const groqApiKey = process.env.GROQ_API_KEY?.trim() ?? '';
         const ai = getGenAIClient();
-        if (!ai) {
+        if (!groqApiKey && !ai) {
           logTranscribeAudit({
             uidPrefix,
             ipHash,
@@ -881,55 +965,98 @@ async function startServer() {
           String(Math.max(0, USER_DAILY_REQUEST_LIMIT - userQuota.requests))
         );
 
-        const audioPart = {
-          inlineData: {
-            mimeType: audio.mimeType,
-            data: audio.cleanBase64,
-          },
-        };
-
         let transcript = '';
-        let modelUsed = 'gemini-3.5-transcribe';
+        let modelUsed = '';
         let primaryError: unknown = null;
+        let primaryMs: number | undefined;
+        let fallbackMs: number | undefined;
+        let groqSucceeded = false;
 
-        try {
-          const primaryResponse = await ai.models.generateContent({
-            model: 'gemini-3.5-transcribe',
-            contents: {
-              parts: [audioPart, { text: 'Transcribe this audio.' }],
-            },
-          });
-          transcript = cleanTranscriptText(extractResponseText(primaryResponse));
-        } catch (err) {
-          primaryError = err;
-          console.warn(
-            'Primary transcription (gemini-3.5-transcribe) failed, trying fallback:',
-            err
-          );
+        // Primary fast path: Groq Whisper Large V3 Turbo
+        if (groqApiKey) {
+          const groqStartedAt = Date.now();
+          try {
+            modelUsed =
+              process.env.GROQ_TRANSCRIBE_MODEL?.trim() ||
+              'whisper-large-v3-turbo';
+            transcript = await transcribeWithGroq(audio, groqApiKey);
+            groqSucceeded = true;
+          } catch (err) {
+            primaryError = err;
+            console.warn('Groq transcription failed:', err);
+          } finally {
+            primaryMs = Date.now() - groqStartedAt;
+          }
         }
 
-        if (!transcript) {
+        // Fallback to Gemini only if Groq wasn't configured or Groq errored
+        if (!groqSucceeded && ai) {
+          const audioPart = {
+            inlineData: {
+              mimeType: audio.mimeType,
+              data: audio.cleanBase64,
+            },
+          };
+
+          const geminiPrimaryStartedAt = Date.now();
+          const primaryTimeoutMs = audio.durationSec <= 30 ? 10_000 : 22_000;
           try {
-            modelUsed = 'gemini-4-hydrogen';
-            const fallbackResponse = await ai.models.generateContent({
-              model: 'gemini-4-hydrogen',
-              contents: [
-                {
-                  role: 'user',
-                  parts: [
-                    audioPart,
-                    {
-                      text: 'Listen carefully to this voice recording and transcribe every spoken word verbatim into clean, punctuated text. Output only the spoken transcript with no extra commentary. If there is genuinely no speech in the audio, output NO_SPEECH.',
-                    },
-                  ],
-                },
-              ],
+            modelUsed = 'gemini-3.5-transcribe';
+            const primaryResponse = await ai.models.generateContent({
+              model: 'gemini-3.5-transcribe',
+              contents: {
+                parts: [audioPart, { text: 'Transcribe this audio.' }],
+              },
+              config: {
+                abortSignal: AbortSignal.timeout(primaryTimeoutMs),
+              },
             });
-            transcript = cleanTranscriptText(extractResponseText(fallbackResponse));
-          } catch (fallbackErr) {
-            if (primaryError) throw primaryError;
-            throw fallbackErr;
+            transcript = cleanTranscriptText(extractResponseText(primaryResponse));
+          } catch (err) {
+            primaryError = primaryError ?? err;
+            console.warn(
+              'Gemini transcription (gemini-3.5-transcribe) failed, trying fallback:',
+              err
+            );
+          } finally {
+            if (primaryMs === undefined) {
+              primaryMs = Date.now() - geminiPrimaryStartedAt;
+            }
           }
+
+          if (!transcript) {
+            const fallbackStartedAt = Date.now();
+            try {
+              modelUsed = 'gemini-4-hydrogen';
+              const fallbackResponse = await ai.models.generateContent({
+                model: 'gemini-4-hydrogen',
+                contents: [
+                  {
+                    role: 'user',
+                    parts: [
+                      audioPart,
+                      { text: 'Transcribe this voice note verbatim.' },
+                    ],
+                  },
+                ],
+                config: {
+                  thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+                  systemInstruction:
+                    'You are a fast, accurate speech-to-text transcriber. Output only the spoken words verbatim with natural punctuation and capitalization, with no commentary or quotes. Output NO_SPEECH only if there is genuinely no intelligible speech.',
+                },
+              });
+              transcript = cleanTranscriptText(
+                extractResponseText(fallbackResponse)
+              );
+            } catch (fallbackErr) {
+              if (primaryError) throw primaryError;
+              throw fallbackErr;
+            } finally {
+              fallbackMs = Date.now() - fallbackStartedAt;
+            }
+          }
+        } else if (!groqSucceeded && primaryError) {
+          throw primaryError;
         }
 
         logTranscribeAudit({
@@ -940,6 +1067,8 @@ async function startServer() {
           bytes: audio.buffer.length,
           durationSec: Number(audio.durationSec.toFixed(2)),
           model: modelUsed,
+          primaryMs,
+          fallbackMs,
           latencyMs: Date.now() - startedAt,
           outcome: transcript ? 'transcribed' : 'no_speech',
         });
@@ -960,7 +1089,8 @@ async function startServer() {
 
         if (
           rawMessage.includes('API_KEY_INVALID') ||
-          rawMessage.includes('PERMISSION_DENIED')
+          rawMessage.includes('PERMISSION_DENIED') ||
+          rawMessage.includes('Groq API error (401)')
         ) {
           res.status(500).json({
             error: 'Voice transcription API key is invalid or unauthorized.',
@@ -991,6 +1121,12 @@ async function startServer() {
       } else {
         res.status(404).send('Build output not found.');
       }
+    });
+  }
+
+  if (FIREBASE_PROJECT_ID) {
+    void getFirebasePublicCerts().catch((err) => {
+      console.warn('Initial Firebase certificate warmup failed:', err);
     });
   }
 

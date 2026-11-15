@@ -132,10 +132,32 @@ export function formatMonthLabel(yearMonth: string): string {
   });
 }
 
+export function getTodayIsoDate(): string {
+  const now = new Date();
+  const yy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+export function createBlankTodaySpread(): JournalSpread {
+  const rand = Math.random().toString(36).slice(2, 7);
+  return sanitizeSpreadPayload({
+    id: `spread-${Date.now()}-${rand}`,
+    date: getTodayIsoDate(),
+    contextNote: '',
+    leftBody: '',
+    rightBody: '',
+    inkColor: 'charcoal',
+    paperStyle: 'ruled',
+    updatedAt: Date.now(),
+  });
+}
+
 export function getNextIsoDate(lastIsoDate: string): string {
   const parts = lastIsoDate.split('-').map(Number);
   if (parts.length !== 3 || parts.some(Number.isNaN)) {
-    return new Date().toISOString().slice(0, 10);
+    return getTodayIsoDate();
   }
   const [y, m, d] = parts;
   const next = new Date(y, m - 1, d + 1);

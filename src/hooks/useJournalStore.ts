@@ -15,8 +15,10 @@ import {
 } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
+  createBlankTodaySpread,
   DEFAULT_SPREADS,
   getNextIsoDate,
+  getTodayIsoDate,
   isUntouchedDefaultSpread,
   loadJournalSpreads,
   saveJournalSpreads,
@@ -43,6 +45,7 @@ type JournalAction =
   | { type: 'CREATE_SPREAD'; createdSpread: JournalSpread }
   | { type: 'DELETE_SPREAD'; index: number }
   | { type: 'APPLY_CLOUD_SPREADS'; spreads: JournalSpread[]; preserveSpreadId?: string }
+  | { type: 'PREPARE_SIGNED_IN'; cachedSpreads: JournalSpread[] }
   | { type: 'RESET_TO_LOCAL'; spreads: JournalSpread[] };
 
 function clampIndex(index: number, length: number): number {
@@ -121,7 +124,8 @@ function journalReducer(state: JournalState, action: JournalAction): JournalStat
     case 'DELETE_SPREAD': {
       if (state.spreads.length <= 1) return state;
       const filtered = state.spreads.filter((_, i) => i !== action.index);
-      const safeSpreads = filtered.length > 0 ? filtered : DEFAULT_SPREADS;
+      const safeSpreads =
+        filtered.length > 0 ? filtered : [createBlankTodaySpread()];
       let nextIndex = state.currentIndex;
       if (state.currentIndex > action.index) {
         nextIndex = state.currentIndex - 1;
@@ -136,7 +140,7 @@ function journalReducer(state: JournalState, action: JournalAction): JournalStat
 
     case 'APPLY_CLOUD_SPREADS': {
       const sorted = sortSpreadsChronologically(
-        action.spreads.length > 0 ? action.spreads : DEFAULT_SPREADS
+        action.spreads.length > 0 ? action.spreads : [createBlankTodaySpread()]
       );
       let nextIndex = state.currentIndex;
       if (action.preserveSpreadId) {
@@ -146,6 +150,18 @@ function journalReducer(state: JournalState, action: JournalAction): JournalStat
       return {
         spreads: sorted,
         currentIndex: clampIndex(nextIndex, sorted.length),
+      };
+    }
+
+    case 'PREPARE_SIGNED_IN': {
+      const cleaned = sortSpreadsChronologically(
+        action.cachedSpreads.filter((s) => !isUntouchedDefaultSpread(s))
+      );
+      const nextSpreads =
+        cleaned.length > 0 ? cleaned : [createBlankTodaySpread()];
+      return {
+        spreads: nextSpreads,
+        currentIndex: Math.max(0, nextSpreads.length - 1),
       };
     }
 
@@ -209,7 +225,7 @@ function fromFirestoreSpreadDoc(
 
   return sanitizeSpreadPayload({
     id: typeof data.id === 'string' && data.id ? data.id : docId,
-    date: typeof data.date === 'string' ? data.date : '2026-11-14',
+    date: typeof data.date === 'string' ? data.date : getTodayIsoDate(),
     contextNote: typeof data.contextNote === 'string' ? data.contextNote : '',
     leftBody: typeof data.leftBody === 'string' ? data.leftBody : '',
     rightBody: typeof data.rightBody === 'string' ? data.rightBody : '',
@@ -274,7 +290,7 @@ export function useJournalStore(user: User | null, authReady: boolean) {
   }, [authReady, state.spreads, user]);
 
   const safeIndex = clampIndex(state.currentIndex, state.spreads.length);
-  const currentSpread = state.spreads[safeIndex] ?? DEFAULT_SPREADS[0];
+  const currentSpread = state.spreads[safeIndex] ?? state.spreads[0];
 
   const writeSpreadToCloud = useCallback(
     async (uid: string, spread: JournalSpread): Promise<void> => {
@@ -382,6 +398,26 @@ export function useJournalStore(user: User | null, authReady: boolean) {
     let unsubscribeSnapshot: Unsubscribe | null = null;
     const uid = user.uid;
 
+    // Immediately replace any untouched demo spreads in state with clean signed-in cache or blank page
+    let cachedSignedInSpreads: JournalSpread[] = [];
+    try {
+      const rawCache = localStorage.getItem(`folio_journal_cloud_${uid}`);
+      if (rawCache) {
+        const parsedCache = JSON.parse(rawCache);
+        if (Array.isArray(parsedCache)) {
+          cachedSignedInSpreads = parsedCache
+            .map(sanitizeSpreadPayload)
+            .filter((s) => !isUntouchedDefaultSpread(s));
+        }
+      }
+    } catch {
+      cachedSignedInSpreads = [];
+    }
+    dispatch({
+      type: 'PREPARE_SIGNED_IN',
+      cachedSpreads: cachedSignedInSpreads,
+    });
+
     const bootstrapAndListen = async () => {
       setSyncStatus('syncing');
       setSyncError(null);
@@ -405,7 +441,7 @@ export function useJournalStore(user: User | null, authReady: boolean) {
 
         if (cancelled) return;
 
-        // 2. Fetch existing cloud spreads to merge local edits cleanly
+        // 2. Fetch existing cloud spreads to merge real user edits cleanly
         const spreadsPath = `users/${uid}/spreads`;
         const spreadsQuery = query(
           collection(db, 'users', uid, 'spreads'),
@@ -424,37 +460,52 @@ export function useJournalStore(user: User | null, authReady: boolean) {
 
         if (cancelled) return;
 
-        // 3. Automatically merge guest local entries into cloud
-        const guestSpreads = loadJournalSpreads();
-        const cloudById = new Map(existingCloudSpreads.map((s) => [s.id, s]));
+        // 3. Filter out untouched hardcoded sample spreads and merge only genuine entries
+        const untouchedSampleIds = existingCloudSpreads
+          .filter(isUntouchedDefaultSpread)
+          .map((s) => s.id);
+        const realCloudSpreads = existingCloudSpreads.filter(
+          (s) => !isUntouchedDefaultSpread(s)
+        );
+
+        const guestSpreads = loadJournalSpreads().filter(
+          (s) => !isUntouchedDefaultSpread(s)
+        );
+        const cloudById = new Map(realCloudSpreads.map((s) => [s.id, s]));
         const toUpload: JournalSpread[] = [];
 
-        if (existingCloudSpreads.length === 0) {
-          const seed = guestSpreads.length > 0 ? guestSpreads : DEFAULT_SPREADS;
-          seed.forEach((s) => toUpload.push(sanitizeSpreadPayload(s)));
-        } else {
-          for (const local of guestSpreads) {
-            if (isUntouchedDefaultSpread(local)) continue;
-            const cleanLocal = sanitizeSpreadPayload(local);
-            const cloudMatch = cloudById.get(cleanLocal.id);
-            if (!cloudMatch) {
-              toUpload.push(cleanLocal);
-            } else if (cleanLocal.updatedAt > cloudMatch.updatedAt) {
-              toUpload.push(cleanLocal);
-            }
+        for (const local of guestSpreads) {
+          const cleanLocal = sanitizeSpreadPayload(local);
+          const cloudMatch = cloudById.get(cleanLocal.id);
+          if (!cloudMatch || cleanLocal.updatedAt > cloudMatch.updatedAt) {
+            toUpload.push(cleanLocal);
           }
         }
 
-        if (toUpload.length > 0) {
+        if (realCloudSpreads.length === 0 && toUpload.length === 0) {
+          toUpload.push(createBlankTodaySpread());
+        }
+
+        if (toUpload.length > 0 || untouchedSampleIds.length > 0) {
+          const operations: Array<
+            | { kind: 'set'; spread: JournalSpread }
+            | { kind: 'delete'; id: string }
+          > = [
+            ...untouchedSampleIds.map((id) => ({ kind: 'delete' as const, id })),
+            ...toUpload.map((spread) => ({ kind: 'set' as const, spread })),
+          ];
+
           const CHUNK_SIZE = 380;
-          for (let i = 0; i < toUpload.length; i += CHUNK_SIZE) {
-            const chunk = toUpload.slice(i, i + CHUNK_SIZE);
+          for (let i = 0; i < operations.length; i += CHUNK_SIZE) {
+            const chunk = operations.slice(i, i + CHUNK_SIZE);
             const batch = writeBatch(db);
-            for (const spread of chunk) {
-              batch.set(
-                doc(db, 'users', uid, 'spreads', spread.id),
-                toFirestoreSpreadDoc(spread, uid)
-              );
+            for (const op of chunk) {
+              const ref = doc(db, 'users', uid, 'spreads', op.kind === 'set' ? op.spread.id : op.id);
+              if (op.kind === 'delete') {
+                batch.delete(ref);
+              } else {
+                batch.set(ref, toFirestoreSpreadDoc(op.spread, uid));
+              }
             }
             try {
               await batch.commit();
@@ -473,9 +524,11 @@ export function useJournalStore(user: User | null, authReady: boolean) {
           spreadsQuery,
           (snapshot) => {
             if (cancelled) return;
-            const cloudList = snapshot.docs.map((d) =>
-              fromFirestoreSpreadDoc(d.id, d.data() as Record<string, unknown>)
-            );
+            const cloudList = snapshot.docs
+              .map((d) =>
+                fromFirestoreSpreadDoc(d.id, d.data() as Record<string, unknown>)
+              )
+              .filter((s) => !isUntouchedDefaultSpread(s));
 
             // Protect locally dirty/in-flight spreads from stale remote echoes
             const localById = new Map(
@@ -544,7 +597,7 @@ export function useJournalStore(user: User | null, authReady: boolean) {
     const last = state.spreads[state.spreads.length - 1];
     return {
       id: `spread-upcoming-${state.spreads.length + 1}`,
-      date: getNextIsoDate(last?.date ?? '2026-11-14'),
+      date: getNextIsoDate(last?.date ?? getTodayIsoDate()),
       contextNote: '',
       leftBody: '',
       rightBody: '',
@@ -614,7 +667,7 @@ export function useJournalStore(user: User | null, authReady: boolean) {
 
     const created = sanitizeSpreadPayload({
       id: generateUniqueSpreadId(),
-      date: getNextIsoDate(last?.date ?? '2026-11-14'),
+      date: getNextIsoDate(last?.date ?? getTodayIsoDate()),
       contextNote: '',
       leftBody: '',
       rightBody: '',

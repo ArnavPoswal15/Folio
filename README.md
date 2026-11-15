@@ -10,7 +10,7 @@ Folio is a digital journal designed to feel like opening a book. Write on custom
 
 - **A book-like writing experience** with 3D cover opening, drag-to-fold GSAP page curls, and responsive desktop/mobile spreads.
 - **Your page, your way** with ruled, dotted, or blank paper and three ink colors (`charcoal`, `midnight`, `sepia`).
-- **Voice dictation** backed by server-side Gemini transcription with client-side 16 kHz mono WAV normalization and live mic level metering.
+- **Voice dictation** powered by Groq Whisper (`whisper-large-v3-turbo`) with Gemini fallback, client-side silence check, and quiet-mic WAV boost.
 - **Guest mode & cloud sync** — entries persist locally in `localStorage` out of the box, with optional Google Sign-In and Firestore sync.
 - **Entries index & CSV export** to search, jump across spreads, or back up your writing.
 
@@ -26,15 +26,15 @@ flowchart LR
   LocalStore[("localStorage\n(Guest Mode & Offline Cache)")]
   FirebaseAuth["Firebase Auth\n(Google Sign-In)"]
   Firestore[("Cloud Firestore\n/users/{uid}/spreads/{id}")]
-  Express["Express Server (server.ts)\nAuth + Rate Limit + WAV Check"]
-  Gemini["Google GenAI API\n(gemini-3.5-transcribe / gemini-4-hydrogen)"]
+  Express["Express Server (server.ts)\nAuth + Rate Limit + Audio Check"]
+  STT["Groq Whisper (whisper-large-v3-turbo)\n+ Gemini Fallback"]
 
   Browser <--> LocalStore
   Browser <--> FirebaseAuth
   Browser <--> Firestore
-  Browser -- "POST /api/transcribe\n(Bearer ID Token + 16kHz WAV)" --> Express
+  Browser -- "POST /api/transcribe\n(Bearer ID Token + Audio)" --> Express
   Express -- "Verify RS256 Token" --> FirebaseAuth
-  Express -- "Server-side GEMINI_API_KEY" --> Gemini
+  Express -- "Server-side GROQ_API_KEY / GEMINI_API_KEY" --> STT
 ```
 
 ### Voice Transcription Protection
@@ -101,7 +101,7 @@ flowchart LR
 
 - **Node.js 22 or newer** (Node `22.18+` for native TypeScript execution in `npm start`)
 - **npm**
-- A **Gemini API key** for voice dictation
+- A **Groq API key** (`GROQ_API_KEY`, free tier at [console.groq.com](https://console.groq.com)) and/or a **Gemini API key** (`GEMINI_API_KEY`) for voice dictation
 
 ### Run locally
 
@@ -112,9 +112,10 @@ npm install
 cp .env.example .env
 ```
 
-Add your Gemini API key to `.env`:
+Add your API key(s) to `.env`:
 
 ```env
+GROQ_API_KEY="your_groq_api_key"
 GEMINI_API_KEY="your_gemini_api_key"
 ```
 

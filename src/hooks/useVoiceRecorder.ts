@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { auth } from '../lib/firebase';
-import { convertBlobToMonoWav } from '../utils/audioWav';
+import { prepareAudioForTranscription } from '../utils/audioWav';
 
 export type RecordingStatus = 'idle' | 'recording' | 'transcribing';
 
@@ -249,9 +249,16 @@ export function useVoiceRecorder({ enabled, onTranscribed }: UseVoiceRecorderOpt
         streamRef.current = stream;
 
         const mimeType = selectSupportedMimeType();
-        const recorder = mimeType
-          ? new MediaRecorder(stream, { mimeType })
-          : new MediaRecorder(stream);
+        let recorder: MediaRecorder;
+        try {
+          recorder = mimeType
+            ? new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 32_000 })
+            : new MediaRecorder(stream, { audioBitsPerSecond: 32_000 });
+        } catch {
+          recorder = mimeType
+            ? new MediaRecorder(stream, { mimeType })
+            : new MediaRecorder(stream);
+        }
 
         recorderRef.current = recorder;
         chunksRef.current = [];
@@ -295,9 +302,9 @@ export function useVoiceRecorder({ enabled, onTranscribed }: UseVoiceRecorderOpt
           setStatus('transcribing');
 
           try {
-            const wavResult = await convertBlobToMonoWav(rawBlob);
+            const prepared = await prepareAudioForTranscription(rawBlob, recordedMime);
 
-            if (wavResult && wavResult.peak < 0.0005 && wavResult.rms < 0.0001) {
+            if (prepared?.isSilent) {
               setErrorTarget(capturedTarget);
               setError(
                 'Your microphone captured silence. Check your mic input or unmute and try again.'
@@ -305,9 +312,9 @@ export function useVoiceRecorder({ enabled, onTranscribed }: UseVoiceRecorderOpt
               return;
             }
 
-            const uploadBlob = wavResult ? wavResult.blob : rawBlob;
-            const uploadMime = wavResult
-              ? 'audio/wav'
+            const uploadBlob = prepared ? prepared.blob : rawBlob;
+            const uploadMime = prepared
+              ? prepared.mimeType
               : recordedMime.split(';')[0].trim() || 'audio/webm';
 
             const currentUser = auth.currentUser;
@@ -326,8 +333,8 @@ export function useVoiceRecorder({ enabled, onTranscribed }: UseVoiceRecorderOpt
               body: JSON.stringify({
                 audioBase64,
                 mimeType: uploadMime,
-                durationSec: wavResult
-                  ? Number(wavResult.durationSec.toFixed(2))
+                durationSec: prepared
+                  ? Number(prepared.durationSec.toFixed(2))
                   : undefined,
               }),
             });
