@@ -1,0 +1,124 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Minimal private profile record for the authenticated journal owner.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID matching the document owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name from Google account.",
+          "minLength": 0,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified account email address.",
+          "minLength": 3,
+          "maxLength": 320
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was last updated."
+        }
+      },
+      "required": ["uid", "displayName", "email", "updatedAt"]
+    },
+    "JournalSpread": {
+      "title": "JournalSpread",
+      "description": "A two-page daily handwritten journal spread belonging to a user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique spread identifier.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "date": {
+          "type": "string",
+          "description": "Entry ISO date in YYYY-MM-DD format.",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "contextNote": {
+          "type": "string",
+          "description": "Optional quiet setting or mood line below the date.",
+          "minLength": 0,
+          "maxLength": 240
+        },
+        "leftBody": {
+          "type": "string",
+          "description": "Handwritten text on the left page.",
+          "minLength": 0,
+          "maxLength": 20000
+        },
+        "rightBody": {
+          "type": "string",
+          "description": "Handwritten text on the right page.",
+          "minLength": 0,
+          "maxLength": 20000
+        },
+        "inkColor": {
+          "type": "string",
+          "description": "Selected fountain-pen ink tone.",
+          "enum": ["charcoal", "midnight", "sepia"]
+        },
+        "paperStyle": {
+          "type": "string",
+          "description": "Selected page ruling style.",
+          "enum": ["ruled", "dotted", "blank"]
+        },
+        "clientUpdatedAt": {
+          "type": "number",
+          "description": "Client millisecond timestamp used for offline/cloud merge ordering."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp validated against request.time on every write."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "date",
+        "contextNote",
+        "leftBody",
+        "rightBody",
+        "inkColor",
+        "paperStyle",
+        "clientUpdatedAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private profile document keyed by Firebase Auth UID."
+    },
+    "/users/{userId}/spreads/{spreadId}": {
+      "schema": { "$ref": "#/entities/JournalSpread" },
+      "description": "Private daily handwritten spreads synced across the owner's devices."
+    }
+  }
+}

@@ -1,0 +1,385 @@
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AccountModal } from './components/AccountModal';
+import { EntriesIndexModal } from './components/EntriesIndexModal';
+import { ExportJournalModal } from './components/ExportJournalModal';
+import { BookPhase, PageCurlStage } from './components/PageCurlStage';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { useJournalStore } from './hooks/useJournalStore';
+import { RecordingTarget, useVoiceRecorder } from './hooks/useVoiceRecorder';
+import { TurnDirection } from './utils/pageCurlGeometry';
+
+function appendTranscriptToBody(existing: string, transcript: string): string {
+  const clean = transcript.trim();
+  if (!clean) return existing;
+  if (!existing.trim()) return clean;
+  if (/[\s\n]$/.test(existing)) return `${existing}${clean}`;
+  if (/[.!?…]["')\]]*$/.test(existing)) return `${existing}\n\n${clean}`;
+  return `${existing} ${clean}`;
+}
+
+interface ViewportMetrics {
+  pageW: number;
+  pageH: number;
+  isMobile: boolean;
+}
+
+function computeViewportMetrics(vw: number, vh: number): ViewportMetrics {
+  const isMobile = vw < 768;
+
+  if (isMobile) {
+    const pageW = Math.max(256, Math.min(440, vw - 44));
+    const maxH = Math.max(360, vh - 128);
+    const pageH = Math.min(maxH, Math.round(pageW / 0.67));
+    return { pageW, pageH, isMobile: true };
+  }
+
+  const availW = Math.max(540, vw - 64);
+  const availH = Math.max(360, vh - 134);
+
+  const maxPageWByWidth = Math.floor((availW - 24) / 2);
+  const maxPageWByHeight = Math.floor((availH - 22) * 0.758);
+
+  const pageW = Math.max(250, Math.min(480, maxPageWByWidth, maxPageWByHeight));
+  const pageH = Math.round(pageW / 0.758);
+
+  return { pageW, pageH, isMobile: false };
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class JournalErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  ErrorBoundaryState
+> {
+  state: ErrorBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError(): ErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-screen h-screen desk-surface flex items-center justify-center p-6">
+          <div className="paper-grain rounded-lg p-8 max-w-md text-center shadow-2xl border border-[#bcae97]">
+            <h1 className="font-serif text-2xl font-semibold text-[#261f19]">
+              Unable to display journal page
+            </h1>
+            <p className="mt-2 text-sm text-[#6d5d4b]">
+              Your entries remain saved safely. Reload to reopen the book.
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-5 px-5 py-2 text-sm font-medium bg-[#3a231c] text-[#f6f1e6] rounded hover:bg-[#4c2e25] transition-colors cursor-pointer"
+            >
+              Reopen Journal
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function JournalWorkspace() {
+  const {
+    user,
+    authReady,
+    authBusy,
+    authError,
+    signInWithGoogle,
+    signOut,
+    clearAuthError,
+  } = useAuth();
+
+  const {
+    spreads,
+    currentIndex,
+    upcomingBlankSpread,
+    syncStatus,
+    syncError,
+    retrySync,
+    flushPendingSaves,
+    updateSpread,
+    goToSpread,
+    turnPrev,
+    turnNext,
+    createSpread,
+    deleteSpread,
+  } = useJournalStore(user, authReady);
+
+  const [bookPhase, setBookPhase] = useState<BookPhase>('closed');
+  const [indexModalOpen, setIndexModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [accountModalOpen, setAccountModalOpen] = useState(false);
+  const [mobileSide, setMobileSide] = useState<'left' | 'right'>('left');
+  const [welcomeDismissed, setWelcomeDismissed] = useState<boolean>(false);
+
+  // Logged-in users open straight into their synced journals when book is closed
+  useEffect(() => {
+    if (authReady && user && bookPhase === 'closed' && !welcomeDismissed) {
+      setWelcomeDismissed(true);
+    }
+  }, [authReady, bookPhase, user, welcomeDismissed]);
+
+  const handleDismissWelcome = useCallback(() => {
+    setWelcomeDismissed(true);
+    setMobileSide('left');
+  }, []);
+
+  const showWelcome = authReady && !welcomeDismissed;
+
+  const spreadsRef = useRef(spreads);
+  spreadsRef.current = spreads;
+
+  const handleVoiceTranscribed = useCallback(
+    (target: RecordingTarget, text: string) => {
+      const targetSpread = spreadsRef.current[target.spreadIndex];
+      if (!targetSpread) return;
+      const field = target.side === 'left' ? 'leftBody' : 'rightBody';
+      updateSpread(target.spreadIndex, {
+        [field]: appendTranscriptToBody(targetSpread[field], text),
+      });
+    },
+    [updateSpread]
+  );
+
+  const voiceControl = useVoiceRecorder({
+    enabled: bookPhase === 'open' && !showWelcome,
+    onTranscribed: handleVoiceTranscribed,
+  });
+
+  const [metrics, setMetrics] = useState(() =>
+    computeViewportMetrics(
+      typeof window !== 'undefined' ? window.innerWidth : 1440,
+      typeof window !== 'undefined' ? window.innerHeight : 900
+    )
+  );
+
+  useEffect(() => {
+    const onResize = () => {
+      setMetrics(
+        computeViewportMetrics(window.innerWidth, window.innerHeight)
+      );
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const handleOpenBook = useCallback(() => {
+    if (bookPhase !== 'closed') return;
+    setBookPhase('opening');
+  }, [bookPhase]);
+
+  const handleOpenComplete = useCallback(() => {
+    setBookPhase('open');
+  }, []);
+
+  const handleCloseBook = useCallback(() => {
+    if (bookPhase !== 'open') return;
+    voiceControl.onCancel();
+    void flushPendingSaves();
+    setIndexModalOpen(false);
+    setExportModalOpen(false);
+    setAccountModalOpen(false);
+    setMobileSide('left');
+    setBookPhase('closing');
+  }, [bookPhase, flushPendingSaves, voiceControl]);
+
+  const handleCloseComplete = useCallback(() => {
+    setBookPhase('closed');
+    if (!user) {
+      setWelcomeDismissed(false);
+    }
+  }, [user]);
+
+  const handleSignOut = useCallback(async () => {
+    await flushPendingSaves();
+    await signOut();
+    setAccountModalOpen(false);
+    setWelcomeDismissed(false);
+  }, [flushPendingSaves, signOut]);
+
+  const handleCommitTurn = useCallback(
+    (direction: TurnDirection) => {
+      if (metrics.isMobile) {
+        if (direction === 'next') {
+          if (mobileSide === 'left') {
+            setMobileSide('right');
+          } else {
+            turnNext();
+            setMobileSide('left');
+          }
+        } else {
+          if (mobileSide === 'right') {
+            setMobileSide('left');
+          } else if (currentIndex > 0) {
+            turnPrev();
+            setMobileSide('right');
+          }
+        }
+        return;
+      }
+
+      if (direction === 'prev') {
+        turnPrev();
+      } else {
+        turnNext();
+      }
+    },
+    [currentIndex, metrics.isMobile, mobileSide, turnNext, turnPrev]
+  );
+
+  const handleSelectSpread = useCallback(
+    (idx: number) => {
+      goToSpread(idx);
+      setMobileSide('left');
+    },
+    [goToSpread]
+  );
+
+  const handleNewSpread = useCallback(() => {
+    createSpread();
+    setMobileSide('left');
+  }, [createSpread]);
+
+  const { pageW, pageH, isMobile } = metrics;
+
+  return (
+    <main className="relative w-screen h-[100dvh] desk-surface flex flex-col items-center justify-center overflow-hidden px-2">
+      <PageCurlStage
+        spreads={spreads}
+        currentIndex={currentIndex}
+        pageW={pageW}
+        pageH={pageH}
+        isMobile={isMobile}
+        mobileSide={mobileSide}
+        bookPhase={bookPhase}
+        upcomingBlankSpread={upcomingBlankSpread}
+        showWelcome={showWelcome}
+        isSignedIn={Boolean(user)}
+        authBusy={authBusy}
+        authError={authError}
+        onOpenBook={handleOpenBook}
+        onOpenComplete={handleOpenComplete}
+        onCloseComplete={handleCloseComplete}
+        onUpdateSpread={updateSpread}
+        onCommitTurn={handleCommitTurn}
+        onNewSpread={handleNewSpread}
+        onOpenIndex={() => setIndexModalOpen(true)}
+        onOpenExport={() => setExportModalOpen(true)}
+        onOpenAccount={() => setAccountModalOpen(true)}
+        onSignInWithGoogle={() => void signInWithGoogle()}
+        onClearAuthError={clearAuthError}
+        onDismissWelcome={handleDismissWelcome}
+        onCloseBook={handleCloseBook}
+        voiceControl={voiceControl}
+      />
+
+      {/* Quiet fixed-height prompt & optional Google Sign-In visible only when closed */}
+      <div
+        className={`mt-5 h-12 flex flex-col items-center justify-center gap-1 px-4 text-center transition-opacity duration-500 ${
+          bookPhase === 'closed' ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
+        <p className="text-sm tracking-wide font-serif italic text-[#5c4f41] opacity-85">
+          Click the book to open
+        </p>
+
+        {authReady ? (
+          user ? (
+            <div className="flex items-center gap-2 text-xs text-[#6d5d4b]">
+              <span className="truncate max-w-[230px] sm:max-w-xs">
+                Synced as {user.email}
+              </span>
+              <span aria-hidden="true">·</span>
+              <button
+                type="button"
+                disabled={authBusy || bookPhase !== 'closed'}
+                onClick={() => void handleSignOut()}
+                className="text-[#4a3b2c] hover:text-[#261f19] underline underline-offset-2 cursor-pointer whitespace-nowrap shrink-0"
+              >
+                {authBusy ? 'Signing out…' : 'Sign out'}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={authBusy || bookPhase !== 'closed'}
+              onClick={() => void signInWithGoogle()}
+              className="text-xs text-[#57361e] hover:text-[#261f19] underline underline-offset-2 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
+            >
+              {authBusy
+                ? 'Connecting Google account…'
+                : 'Sign in with Google to sync across devices'}
+            </button>
+          )
+        ) : (
+          <div className="h-4" />
+        )}
+      </div>
+
+      {bookPhase === 'closed' && authError ? (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-md flex items-center gap-2 text-xs text-[#732323] bg-[#faf6ed]/95 border border-[#8c2d2d]/30 rounded px-3.5 py-2 shadow-sm text-center">
+          <span>{authError}</span>
+          <button
+            type="button"
+            onClick={clearAuthError}
+            className="underline cursor-pointer shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
+      <EntriesIndexModal
+        isOpen={indexModalOpen}
+        spreads={spreads}
+        currentIndex={currentIndex}
+        syncStatus={syncStatus}
+        userEmail={user?.email}
+        onSelectSpread={handleSelectSpread}
+        onNewSpread={handleNewSpread}
+        onOpenExport={() => setExportModalOpen(true)}
+        onOpenAccount={() => setAccountModalOpen(true)}
+        onDeleteSpread={deleteSpread}
+        onClose={() => setIndexModalOpen(false)}
+      />
+
+      <ExportJournalModal
+        isOpen={exportModalOpen}
+        spreads={spreads}
+        onClose={() => setExportModalOpen(false)}
+      />
+
+      <AccountModal
+        isOpen={accountModalOpen}
+        user={user}
+        authBusy={authBusy}
+        authError={authError}
+        syncStatus={syncStatus}
+        syncError={syncError}
+        spreadsCount={spreads.length}
+        onSignInWithGoogle={signInWithGoogle}
+        onSignOut={handleSignOut}
+        onRetrySync={retrySync}
+        onClearAuthError={clearAuthError}
+        onClose={() => setAccountModalOpen(false)}
+      />
+    </main>
+  );
+}
+
+export default function App() {
+  return (
+    <JournalErrorBoundary>
+      <AuthProvider>
+        <JournalWorkspace />
+      </AuthProvider>
+    </JournalErrorBoundary>
+  );
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Folio — Handwritten Journal",
+  "description": "A tactile daily journal with a 3D opening cover, handwritten pages, and natural drag-to-fold paper turning.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

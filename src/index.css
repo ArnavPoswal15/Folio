@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Cormorant Garamond", Georgia, serif;
+  --font-hand: "Caveat", cursive;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: #dcd5c7;
+    color: #231f1c;
+    font-family: "Cormorant Garamond", Georgia, serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+    user-select: none;
+  }
+}
+
+/* Warm architectural linen & stone studio surface */
+.desk-surface {
+  background-color: #dbd3c5;
+  background-image:
+    radial-gradient(ellipse 85% 75% at 50% 44%, rgba(247, 243, 234, 0.45) 0%, rgba(214, 205, 190, 0.5) 68%, rgba(186, 175, 158, 0.72) 100%),
+    repeating-linear-gradient(
+      0deg,
+      rgba(95, 82, 66, 0.018) 0px,
+      rgba(95, 82, 66, 0.018) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(95, 82, 66, 0.014) 0px,
+      rgba(95, 82, 66, 0.014) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+}
+
+/* Archival ivory cotton paper */
+.paper-grain {
+  background-color: #faf6ed;
+  background-image:
+    radial-gradient(rgba(110, 88, 62, 0.028) 1px, transparent 0),
+    radial-gradient(rgba(90, 70, 48, 0.02) 1px, transparent 0);
+  background-size: 24px 24px, 17px 17px;
+  background-position: 0 0, 9px 11px;
+}
+
+/* Ruled lines aligned strictly to 32px line-height */
+.paper-ruled {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 31px,
+    rgba(128, 108, 86, 0.17) 31px,
+    rgba(128, 108, 86, 0.17) 32px
+  );
+  background-position: 0 2px;
+}
+
+/* Dotted grid aligned to 24px spacing */
+.paper-dotted {
+  background-image: radial-gradient(rgba(120, 100, 78, 0.25) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 6px 10px;
+}
+
+/* Woven deep espresso-umber bookcloth */
+.cover-cloth {
+  background-color: #2f231e;
+  background-image:
+    linear-gradient(145deg, rgba(255, 240, 220, 0.04) 0%, rgba(0, 0, 0, 0.22) 100%),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 242, 224, 0.022) 0px,
+      rgba(255, 242, 224, 0.022) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.07) 0px,
+      rgba(0, 0, 0, 0.07) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+}
+
+/* Fountain-pen ink crispness */
+.ink-prose {
+  font-kerning: normal;
+}
+
+/* Quiet custom scrollbar inside handwritten textareas */
+.journal-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.journal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.journal-scroll::-webkit-scrollbar-thumb {
+  background: rgba(120, 100, 78, 0.22);
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
