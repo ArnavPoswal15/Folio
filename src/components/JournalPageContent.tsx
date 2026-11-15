@@ -246,13 +246,27 @@ export const JournalPageContent: React.FC<JournalPageContentProps> = ({
     return (
       <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] leading-snug text-[#732323] bg-[#faf2eb] border border-[#8c2d2d]/25 rounded px-2 py-1">
         <span>{voiceControl.error}</span>
-        <button
-          type="button"
-          onClick={voiceControl.onClearError}
-          className="underline shrink-0 cursor-pointer hover:text-[#4d1414]"
-        >
-          Dismiss
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {!isSignedIn && onOpenAccount ? (
+            <button
+              type="button"
+              onClick={() => {
+                voiceControl.onClearError();
+                onOpenAccount();
+              }}
+              className="font-medium underline cursor-pointer text-[#57361e] hover:text-[#261f19]"
+            >
+              Sign in
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={voiceControl.onClearError}
+            className="underline cursor-pointer hover:text-[#4d1414]"
+          >
+            Dismiss
+          </button>
+        </div>
       </div>
     );
   };

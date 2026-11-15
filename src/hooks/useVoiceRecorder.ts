@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { auth } from '../lib/firebase';
 import { convertBlobToMonoWav } from '../utils/audioWav';
 
 export type RecordingStatus = 'idle' | 'recording' | 'transcribing';
@@ -223,6 +224,12 @@ export function useVoiceRecorder({ enabled, onTranscribed }: UseVoiceRecorderOpt
 
       const nextTarget: RecordingTarget = { spreadIndex, side };
 
+      if (!auth.currentUser) {
+        setErrorTarget(nextTarget);
+        setError('Sign in with Google to use voice dictation.');
+        return;
+      }
+
       if (
         typeof navigator === 'undefined' ||
         !navigator.mediaDevices?.getUserMedia ||
@@ -303,12 +310,26 @@ export function useVoiceRecorder({ enabled, onTranscribed }: UseVoiceRecorderOpt
               ? 'audio/wav'
               : recordedMime.split(';')[0].trim() || 'audio/webm';
 
+            const currentUser = auth.currentUser;
+            if (!currentUser) {
+              throw new Error('Sign in with Google to use voice dictation.');
+            }
+            const idToken = await currentUser.getIdToken();
             const audioBase64 = await blobToBase64(uploadBlob);
 
             const res = await fetch('/api/transcribe', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ audioBase64, mimeType: uploadMime }),
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${idToken}`,
+              },
+              body: JSON.stringify({
+                audioBase64,
+                mimeType: uploadMime,
+                durationSec: wavResult
+                  ? Number(wavResult.durationSec.toFixed(2))
+                  : undefined,
+              }),
             });
 
             const data = (await res.json().catch(() => ({}))) as {

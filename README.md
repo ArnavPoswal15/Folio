@@ -8,18 +8,102 @@ Folio is a digital journal designed to feel like opening a book. Write on custom
 
 ## Features
 
-- **A book-like writing experience** with animated page turns and responsive layouts.
-- **Your page, your way** with ruled, dotted, or blank paper and three ink colors.
-- **Voice dictation** to turn recordings into text.
-- **Guest mode** with entries saved in your browser, plus optional Google sign-in and cloud sync.
-- **An entries index and CSV export** to find and back up your writing.
+- **A book-like writing experience** with 3D cover opening, drag-to-fold GSAP page curls, and responsive desktop/mobile spreads.
+- **Your page, your way** with ruled, dotted, or blank paper and three ink colors (`charcoal`, `midnight`, `sepia`).
+- **Voice dictation** backed by server-side Gemini transcription with client-side 16 kHz mono WAV normalization and live mic level metering.
+- **Guest mode & cloud sync** — entries persist locally in `localStorage` out of the box, with optional Google Sign-In and Firestore sync.
+- **Entries index & CSV export** to search, jump across spreads, or back up your writing.
+
+> **Preview & Screenshots:** Open the [live app](https://folio-journal-book.ai.studio/) to try the interactive book cover and page curl. *(Add captured screenshots or a page-turn demo GIF under `docs/` when publishing showcase media.)*
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Browser["Browser (React 19 + GSAP + Web Audio)"]
+  LocalStore[("localStorage\n(Guest Mode & Offline Cache)")]
+  FirebaseAuth["Firebase Auth\n(Google Sign-In)"]
+  Firestore[("Cloud Firestore\n/users/{uid}/spreads/{id}")]
+  Express["Express Server (server.ts)\nAuth + Rate Limit + WAV Check"]
+  Gemini["Google GenAI API\n(gemini-3.5-transcribe / gemini-4-hydrogen)"]
+
+  Browser <--> LocalStore
+  Browser <--> FirebaseAuth
+  Browser <--> Firestore
+  Browser -- "POST /api/transcribe\n(Bearer ID Token + 16kHz WAV)" --> Express
+  Express -- "Verify RS256 Token" --> FirebaseAuth
+  Express -- "Server-side GEMINI_API_KEY" --> Gemini
+```
+
+### Voice Transcription Protection
+
+`POST /api/transcribe` is protected server-side before invoking Gemini:
+
+- **Authentication:** Requires a verified Firebase Auth ID token (`Authorization: Bearer <token>`), validated against Google's x509 certificates.
+- **Rate limiting:** Sliding-window per-IP (`15 req/min`) and per-user (`8 req/min`) limits returning `429` + `Retry-After` headers.
+- **Daily quotas:** Per-user (`60 requests/day`, `900s` total audio/day) and global daily circuit breaker (`1000 requests/day`).
+- **Payload & duration validation:** `9 MB` JSON body cap, `6 MB` WAV / `3 MB` compressed audio cap, container magic-byte inspection, and server-side WAV header duration check (`0.2s`–`185s`).
+- **Audit logging:** Structured JSON logs (`uid` prefix, hashed IP, duration, bytes, latency, outcome) without logging audio or transcript text.
+
+---
+
+## Database Schema
+
+When signed in with Google, entries are stored in Cloud Firestore (with strict owner-only access and field validation enforced in `firestore.rules` and `firebase-blueprint.json`).
+
+### `/users/{userId}` (`UserProfile`)
+
+| Field | Type | Constraints |
+| --- | --- | --- |
+| `uid` | `string` | Matches `request.auth.uid` and path `{userId}` |
+| `displayName` | `string` | Max `120` chars |
+| `email` | `string` | Verified email, `3`–`320` chars |
+| `updatedAt` | `timestamp` | Enforced equal to `request.time` |
+
+### `/users/{userId}/spreads/{spreadId}` (`JournalSpread`)
+
+| Field | Type | Constraints |
+| --- | --- | --- |
+| `id` | `string` | `^[a-zA-Z0-9_-]+$`, matches `{spreadId}` |
+| `userId` | `string` | Immutable owner UID (`== request.auth.uid`) |
+| `date` | `string` | `YYYY-MM-DD` |
+| `contextNote` | `string` | Max `240` chars |
+| `leftBody` | `string` | Max `20,000` chars |
+| `rightBody` | `string` | Max `20,000` chars |
+| `inkColor` | `enum` | `charcoal` \| `midnight` \| `sepia` |
+| `paperStyle` | `enum` | `ruled` \| `dotted` \| `blank` |
+| `clientUpdatedAt` | `number` | Client ms timestamp for merge ordering |
+| `updatedAt` | `timestamp` | Enforced equal to `request.time` |
+
+Guest mode stores an array of `JournalSpread` objects locally in browser `localStorage` and merges/syncs cleanly upon signing in.
+
+---
+
+## Deployment Architecture
+
+```mermaid
+flowchart LR
+  Push["git push -> main"] --> GHA["GitHub Actions\n(.github/workflows/deploy.yml)"]
+  GHA --> Build["Cloud Build + Artifact Registry\n(Dockerfile: node:22-slim)"]
+  Build --> CloudRun["Google Cloud Run (folio)\nPORT=8080 | NODE_ENV=production"]
+  CloudRun --> Static["Serves Vite dist/ SPA"]
+  CloudRun --> API["Serves /api/transcribe & /api/health"]
+```
+
+- **Container:** `Dockerfile` uses `node:22-slim`, builds static assets with `npm run build`, and runs `node server.ts` on port `8080`.
+- **CI/CD:** `.github/workflows/deploy.yml` deploys pushes on `main` to Cloud Run using GitHub Secrets (`GCP_SA_KEY`, `GEMINI_API_KEY`).
+
+---
 
 ## Get started
 
 ### Requirements
 
-- Node.js 20 or newer
-- A Gemini API key for voice dictation
+- **Node.js 22 or newer** (Node `22.18+` for native TypeScript execution in `npm start`)
+- **npm**
+- A **Gemini API key** for voice dictation
 
 ### Run locally
 
@@ -36,6 +120,8 @@ Add your Gemini API key to `.env`:
 GEMINI_API_KEY="your_gemini_api_key"
 ```
 
+Optional rate-limit and quota overrides (`TRANSCRIBE_IP_RATE_LIMIT_PER_MIN`, `TRANSCRIBE_USER_RATE_LIMIT_PER_MIN`, `TRANSCRIBE_USER_DAILY_REQUESTS`, `TRANSCRIBE_USER_DAILY_AUDIO_SECONDS`, `TRANSCRIBE_GLOBAL_DAILY_REQUESTS`, `TRANSCRIBE_MAX_AUDIO_SECONDS`) are documented in `.env.example`.
+
 Then start the development server:
 
 ```bash
@@ -44,16 +130,24 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Voice dictation requires `GEMINI_API_KEY`. Google sign-in and cloud sync use the Firebase settings in `firebase-applet-config.json`; configure that file for your Firebase project if you want to use those features.
+To use Google Sign-In and Firestore sync on your own Firebase project, update `firebase-applet-config.json`, deploy `firestore.rules`, and add your host domain under **Firebase Console → Authentication → Settings → Authorized domains**.
 
 ## Commands
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Start the development server |
-| `npm run lint` | Check TypeScript types |
-| `npm run build` | Create a production build |
-| `NODE_ENV=production npm start` | Start the production server |
+| `npm run dev` | Start Express + Vite dev server on port `3000` |
+| `npm run lint` | Run Oxlint and TypeScript type checking |
+| `npm run typecheck` | Run TypeScript checking (`tsc --noEmit`) |
+| `npm run build` | Build production client bundle into `dist/` |
+| `NODE_ENV=production npm start` | Start production server (`node server.ts`) |
+
+## Known Limitations
+
+- **Voice dictation requires sign-in:** Guests can write, customize pages, and export CSV locally, while voice dictation requires Google Sign-In so `/api/transcribe` can enforce per-user quotas.
+- **In-memory rate limiting:** Rate limits and daily quotas are tracked in process memory per Cloud Run instance; multi-instance deployments or cold restarts reset counters unless backed by Redis/Firestore.
+- **Single-owner privacy:** Firestore rules restrict all reads and writes strictly to the authenticated owner (`request.auth.uid`); shared/collaborative journals are not supported.
+- **Browser audio support:** Voice recording relies on browser `MediaRecorder` and Web Audio API (`getUserMedia`), which require HTTPS (or `localhost`) and microphone permission.
 
 ## Built with
 
