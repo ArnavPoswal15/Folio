@@ -85,15 +85,13 @@ Guest mode stores an array of `JournalSpread` objects locally in browser `localS
 
 ```mermaid
 flowchart LR
-  Push["git push -> main"] --> GHA["GitHub Actions\n(.github/workflows/deploy.yml)"]
-  GHA --> Build["Cloud Build + Artifact Registry\n(Dockerfile: node:22-slim)"]
-  Build --> CloudRun["Google Cloud Run (folio)\nPORT=8080 | NODE_ENV=production"]
-  CloudRun --> Static["Serves Vite dist/ SPA"]
-  CloudRun --> API["Serves /api/transcribe & /api/health"]
+  Source["Repository Source\n(Dockerfile: node:22-slim)"] --> Build["Container Build\n(npm install + npm run build)"]
+  Build --> Server["Production Server (PORT=8080)\nNODE_ENV=production node server.ts"]
+  Server --> Static["Serves Vite dist/ SPA"]
+  Server --> API["Serves /api/transcribe & /api/health"]
 ```
 
 - **Container:** `Dockerfile` uses `node:22-slim`, builds static assets with `npm run build`, and runs `node server.ts` on port `8080`.
-- **CI/CD:** `.github/workflows/deploy.yml` deploys pushes on `main` to Cloud Run using GitHub Secrets (`GCP_SA_KEY`, `GEMINI_API_KEY`).
 
 ---
 
