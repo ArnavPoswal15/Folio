@@ -4,7 +4,7 @@
 
 Folio is a digital journal designed to feel like opening a book. Write on customizable paper, turn pages with a natural curl, and keep your entries on your device or sync them across devices.
 
-**Live app:** [folio-journal on Google Cloud](https://ais-pre-kdmulkwyfabpgll6ftbxkn-136037145469.asia-southeast1.run.app)
+**Live app:** [folio-journal on Google Cloud](https://folio-journal-book.ai.studio/)
 
 ## Features
 
