@@ -1,34 +1,24 @@
-export interface WavConversionResult {
-  blob: Blob;
-  durationSec: number;
-  rms: number;
-  peak: number;
-}
+import {
+  DIRECT_COMPRESSED_MIMES,
+  VOICE_RECORDER_CONFIG,
+} from '../constants/voice';
+import { PreparedAudioResult, WavConversionResult } from '../types/voice';
 
-export interface PreparedAudioResult {
-  blob: Blob;
-  mimeType: string;
-  durationSec: number;
-  rms: number;
-  peak: number;
-  isSilent: boolean;
-  usedWavBoost: boolean;
-}
-
-const DIRECT_COMPRESSED_MIMES = new Set([
-  'audio/webm',
-  'audio/ogg',
-  'audio/mp4',
-  'audio/mpeg',
-]);
-
-function measureSpeechStats(channel: Float32Array, sampleRate: number): {
+/**
+ * Measures RMS and peak amplitude across the central speech portion of a PCM channel.
+ * @param channel - Normalized mono float audio samples (-1..1).
+ * @param sampleRate - Audio sample rate in Hz.
+ * @returns Root-mean-square level and peak amplitude.
+ */
+export function measureSpeechStats(
+  channel: Float32Array,
+  sampleRate: number
+): {
   rms: number;
   peak: number;
 } {
-  // Trim 50ms edges to avoid mouse-click spikes skewing peak/RMS
   const edgeSamples = Math.min(
-    Math.floor(sampleRate * 0.05),
+    Math.floor(sampleRate * VOICE_RECORDER_CONFIG.EDGE_TRIM_SECONDS),
     Math.floor(channel.length * 0.1)
   );
   const startIdx = edgeSamples;
@@ -47,7 +37,14 @@ function measureSpeechStats(channel: Float32Array, sampleRate: number): {
   return { rms: Math.sqrt(sumSq / count), peak };
 }
 
-function encodeMonoWavFromChannel(
+/**
+ * Encodes a mono Float32Array PCM buffer into a 16-bit PCM RIFF WAV Blob with linear gain.
+ * @param channel - Normalized mono float audio samples (-1..1).
+ * @param sampleRate - Output WAV sample rate in Hz.
+ * @param gain - Linear gain multiplier applied before 16-bit quantization.
+ * @returns Encoded WAV Blob (`audio/wav`).
+ */
+export function encodeMonoWavFromChannel(
   channel: Float32Array,
   sampleRate: number,
   gain: number
@@ -87,18 +84,17 @@ function encodeMonoWavFromChannel(
 }
 
 /**
- * Fast audio preparation for transcription:
- * - Decodes once to detect silent recordings and measure speech RMS.
- * - If volume is already clear on a compact compressed format (webm/ogg/mp4),
- *   uploads the small compressed blob directly (10x smaller & faster upload).
- * - If the microphone is quiet (rms < 0.025) or the container needs normalizing,
- *   resamples to 16 kHz mono WAV with safe RMS gain boost for accuracy.
+ * Prepares recorded audio for transcription by rejecting silence, fast-passing clear compressed clips, or gain-boosting quiet mics to 16 kHz mono WAV.
+ * @param rawBlob - Raw audio Blob captured from MediaRecorder.
+ * @param recordedMime - Reported MediaRecorder MIME type string.
+ * @returns Prepared audio payload metadata, or null if decoding failed.
  */
 export async function prepareAudioForTranscription(
   rawBlob: Blob,
   recordedMime: string
 ): Promise<PreparedAudioResult | null> {
-  const cleanMime = recordedMime.split(';')[0].trim().toLowerCase() || 'audio/webm';
+  const cleanMime =
+    recordedMime.split(';')[0].trim().toLowerCase() || 'audio/webm';
   if (typeof window === 'undefined') return null;
 
   const AudioCtx =
@@ -118,7 +114,10 @@ export async function prepareAudioForTranscription(
     const channel0 = decoded.getChannelData(0);
     const { rms, peak } = measureSpeechStats(channel0, decoded.sampleRate);
 
-    if (peak < 0.0005 && rms < 0.0001) {
+    if (
+      peak < VOICE_RECORDER_CONFIG.SILENCE_PEAK_THRESHOLD &&
+      rms < VOICE_RECORDER_CONFIG.SILENCE_RMS_THRESHOLD
+    ) {
       return {
         blob: rawBlob,
         mimeType: cleanMime,
@@ -130,11 +129,10 @@ export async function prepareAudioForTranscription(
       };
     }
 
-    // Fast path: healthy volume + compact compressed container -> skip WAV bloat
     if (
-      rms >= 0.025 &&
+      rms >= VOICE_RECORDER_CONFIG.DIRECT_COMPRESSED_MIN_RMS &&
       DIRECT_COMPRESSED_MIMES.has(cleanMime) &&
-      rawBlob.size <= 2.5 * 1024 * 1024
+      rawBlob.size <= VOICE_RECORDER_CONFIG.MAX_DIRECT_UPLOAD_BYTES
     ) {
       return {
         blob: rawBlob,
@@ -147,11 +145,13 @@ export async function prepareAudioForTranscription(
       };
     }
 
-    // Quiet mic or non-standard container: resample to 16 kHz mono WAV with gain boost
     const OfflineCtx =
       window.OfflineAudioContext ||
-      (window as unknown as { webkitOfflineAudioContext?: typeof OfflineAudioContext })
-        .webkitOfflineAudioContext;
+      (
+        window as unknown as {
+          webkitOfflineAudioContext?: typeof OfflineAudioContext;
+        }
+      ).webkitOfflineAudioContext;
     if (!OfflineCtx) {
       return {
         blob: rawBlob,
@@ -164,8 +164,11 @@ export async function prepareAudioForTranscription(
       };
     }
 
-    const targetSampleRate = 16000;
-    const targetLength = Math.max(1, Math.ceil(decoded.duration * targetSampleRate));
+    const targetSampleRate = VOICE_RECORDER_CONFIG.TARGET_SAMPLE_RATE_HZ;
+    const targetLength = Math.max(
+      1,
+      Math.ceil(decoded.duration * targetSampleRate)
+    );
     const offline = new OfflineCtx(1, targetLength, targetSampleRate);
     const source = offline.createBufferSource();
     source.buffer = decoded;
@@ -178,9 +181,15 @@ export async function prepareAudioForTranscription(
 
     let gain = 1;
     if (monoStats.rms > 0.0004 && monoStats.rms < 0.08) {
-      const desiredGain = 0.12 / monoStats.rms;
-      const maxSafeGain = monoStats.peak > 0 ? 0.9 / monoStats.peak : 8;
-      gain = Math.max(1, Math.min(8, desiredGain, maxSafeGain));
+      const desiredGain = VOICE_RECORDER_CONFIG.TARGET_WAV_RMS / monoStats.rms;
+      const maxSafeGain =
+        monoStats.peak > 0
+          ? VOICE_RECORDER_CONFIG.MAX_SAFE_PEAK / monoStats.peak
+          : VOICE_RECORDER_CONFIG.MAX_WAV_GAIN;
+      gain = Math.max(
+        1,
+        Math.min(VOICE_RECORDER_CONFIG.MAX_WAV_GAIN, desiredGain, maxSafeGain)
+      );
     }
 
     return {
@@ -199,6 +208,11 @@ export async function prepareAudioForTranscription(
   }
 }
 
+/**
+ * Convenience wrapper that prepares an arbitrary audio Blob into 16 kHz mono WAV stats.
+ * @param blob - Raw audio Blob.
+ * @returns Normalized WAV Blob and speech statistics, or null on decode failure.
+ */
 export async function convertBlobToMonoWav(
   blob: Blob
 ): Promise<WavConversionResult | null> {

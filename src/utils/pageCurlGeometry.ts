@@ -1,42 +1,22 @@
-export interface Point {
-  x: number;
-  y: number;
-}
-
-export type TurnDirection = 'next' | 'prev';
-export type CornerAnchor = 'top' | 'bottom';
-
-export interface CurlGeometry {
-  isActive: boolean;
-  direction: TurnDirection;
-  corner: CornerAnchor;
-  anchor: Point;
-  pointer: Point;
-  /** Progress 0..1 */
-  progress: number;
-  /** Polygon in local page coordinates [0..W, 0..H] for revealing the underlying page */
-  underneathClip: string;
-  /** Polygon in spread/stage coordinates for clipping the folded-over flap at the fold crease */
-  flapWrapperClip: string;
-  /** CSS transform string for the backside page (W x H) inside the flap wrapper */
-  backPageTransform: string;
-  /** CSS transform-origin string for the backside page */
-  backPageOrigin: string;
-  /** Fold line midpoint in stage coordinates */
-  foldMidpoint: Point;
-  /** Fold line midpoint in local page coordinates (for underlying page shadow) */
-  foldMidpointLocal: Point;
-  /** Fold line normal angle in degrees (pointing from A toward P) */
-  foldNormalDeg: number;
-  /** Visual intensity 0..1 for shadows & curl highlight */
-  intensity: number;
-}
+import { JournalSpread } from '../types/journal';
+import {
+  CornerAnchor,
+  CurlGeometry,
+  CurlPageDescriptor,
+  CurlStageDescriptors,
+  Point,
+  TurnDirection,
+} from '../types/pageCurl';
 
 /**
- * Clips a convex polygon against half-plane: (Q - M) · n >= 0 (if keepPositive)
- * or <= 0 (if !keepPositive).
+ * Clips a convex polygon against half-plane: `(Q - M) · n >= 0` (if `keepPositive`) or `<= 0`.
+ * @param poly - Input convex polygon vertices.
+ * @param M - Origin point on the clipping line.
+ * @param n - Normal vector defining the half-plane orientation.
+ * @param keepPositive - Whether to keep the positive side (`true`) or negative side (`false`).
+ * @returns Clipped polygon vertices.
  */
-function clipPolygonHalfPlane(
+export function clipPolygonHalfPlane(
   poly: Point[],
   M: Point,
   n: Point,
@@ -78,6 +58,13 @@ function clipPolygonHalfPlane(
   return output;
 }
 
+/**
+ * Serializes polygon vertices into a CSS `clip-path: polygon(...)` string.
+ * @param points - Polygon vertices.
+ * @param offsetX - Horizontal coordinate origin offset.
+ * @param offsetY - Vertical coordinate origin offset.
+ * @returns CSS polygon function string.
+ */
 function toCssPolygon(points: Point[], offsetX = 0, offsetY = 0): string {
   if (points.length < 3) return 'polygon(0px 0px, 0px 0px, 0px 0px)';
   return `polygon(${points
@@ -85,6 +72,13 @@ function toCssPolygon(points: Point[], offsetX = 0, offsetY = 0): string {
     .join(', ')})`;
 }
 
+/**
+ * Resolves the binding spine X coordinate for single-page or two-page spread mode.
+ * @param direction - Turn direction (`next` or `prev`).
+ * @param pageW - Single page width in CSS pixels.
+ * @param isSinglePage - Whether single-page mobile layout is active.
+ * @returns Spine X coordinate in stage pixels.
+ */
 function getSpineX(
   direction: TurnDirection,
   pageW: number,
@@ -96,6 +90,15 @@ function getSpineX(
   return pageW;
 }
 
+/**
+ * Computes the corner anchor point from which a page curl originates.
+ * @param direction - Turn direction (`next` or `prev`).
+ * @param corner - Vertical corner (`top` or `bottom`).
+ * @param pageW - Single page width in CSS pixels.
+ * @param pageH - Single page height in CSS pixels.
+ * @param isSinglePage - Whether single-page mobile layout is active.
+ * @returns Anchor coordinates in stage space.
+ */
 export function getAnchorPoint(
   direction: TurnDirection,
   corner: CornerAnchor,
@@ -115,6 +118,15 @@ export function getAnchorPoint(
   };
 }
 
+/**
+ * Computes the destination corner point when a page turn completes.
+ * @param direction - Turn direction (`next` or `prev`).
+ * @param corner - Vertical corner (`top` or `bottom`).
+ * @param pageW - Single page width in CSS pixels.
+ * @param pageH - Single page height in CSS pixels.
+ * @param isSinglePage - Whether single-page mobile layout is active.
+ * @returns Target resting corner coordinates in stage space.
+ */
 export function getTargetPoint(
   direction: TurnDirection,
   corner: CornerAnchor,
@@ -136,6 +148,13 @@ export function getTargetPoint(
 
 /**
  * Enforces physical paper spine constraints so the turning sheet never detaches from the binding.
+ * @param rawP - Unconstrained pointer coordinates in stage space.
+ * @param direction - Turn direction (`next` or `prev`).
+ * @param corner - Vertical corner (`top` or `bottom`).
+ * @param pageW - Single page width in CSS pixels.
+ * @param pageH - Single page height in CSS pixels.
+ * @param isSinglePage - Whether single-page mobile layout is active.
+ * @returns Constrained pointer coordinates bound to the spine arc.
  */
 export function clampToBookSpine(
   rawP: Point,
@@ -194,6 +213,16 @@ export function clampToBookSpine(
   return { x: px, y: py };
 }
 
+/**
+ * Computes clip-path polygons, reflected flap transform, and fold shadow geometry for a page curl frame.
+ * @param rawPointer - Pointer coordinates in stage space.
+ * @param direction - Turn direction (`next` or `prev`).
+ * @param corner - Vertical corner (`top` or `bottom`).
+ * @param pageW - Single page width in CSS pixels.
+ * @param pageH - Single page height in CSS pixels.
+ * @param isSinglePage - Whether single-page mobile layout is active.
+ * @returns Full curl geometry payload for rendering the revealed sheet and folded flap.
+ */
 export function computeCurlGeometry(
   rawPointer: Point,
   direction: TurnDirection,
@@ -223,7 +252,14 @@ export function computeCurlGeometry(
     };
   }
 
-  const P = clampToBookSpine(rawPointer, direction, corner, pageW, pageH, isSinglePage);
+  const P = clampToBookSpine(
+    rawPointer,
+    direction,
+    corner,
+    pageW,
+    pageH,
+    isSinglePage
+  );
 
   const nx = P.x - A.x;
   const ny = P.y - A.y;
@@ -243,7 +279,13 @@ export function computeCurlGeometry(
       backPageOrigin: '0px 0px',
       foldMidpoint: A,
       foldMidpointLocal: {
-        x: isSinglePage ? (direction === 'next' ? pageW : 0) : direction === 'next' ? pageW : 0,
+        x: isSinglePage
+          ? direction === 'next'
+            ? pageW
+            : 0
+          : direction === 'next'
+            ? pageW
+            : 0,
         y: A.y,
       },
       foldNormalDeg: 0,
@@ -321,5 +363,188 @@ export function computeCurlGeometry(
     foldMidpointLocal: { x: M.x - pageOffsetX, y: M.y },
     foldNormalDeg,
     intensity: Math.max(0.16, intensity),
+  };
+}
+
+/**
+ * Determines whether a spread shares the same calendar date as its immediately preceding spread.
+ * @param spreads - Ordered list of journal spreads.
+ * @param idx - Target spread index.
+ * @param target - Spread object at the target index (or upcoming blank spread).
+ * @returns True if the spread is a same-day continuation sheet.
+ */
+export function isContinuationSpread(
+  spreads: JournalSpread[],
+  idx: number,
+  target?: JournalSpread | null
+): boolean {
+  return Boolean(target && idx > 0 && spreads[idx - 1]?.date === target.date);
+}
+
+/**
+ * Resolves underlying reveal pages and folded flap backside descriptors for active page curls.
+ * @param params - Spread list, current indices, mobile state, welcome flag, and active curl direction.
+ * @returns Continuation flag plus resolved nextReveal, prevReveal, and flapBack descriptors.
+ */
+export function resolveCurlStageDescriptors(params: {
+  spreads: JournalSpread[];
+  currentIndex: number;
+  currentSpread: JournalSpread;
+  upcomingBlankSpread: JournalSpread;
+  isMobile: boolean;
+  mobileSide: 'left' | 'right';
+  showWelcome: boolean;
+  curlDirection: TurnDirection | null;
+}): CurlStageDescriptors {
+  const {
+    spreads,
+    currentIndex,
+    currentSpread,
+    upcomingBlankSpread,
+    isMobile,
+    mobileSide,
+    showWelcome,
+    curlDirection,
+  } = params;
+
+  const prevSpread = currentIndex > 0 ? spreads[currentIndex - 1] : null;
+  const nextSpread =
+    currentIndex < spreads.length - 1
+      ? spreads[currentIndex + 1]
+      : upcomingBlankSpread;
+
+  const isCurrentContinuation = isContinuationSpread(
+    spreads,
+    currentIndex,
+    currentSpread
+  );
+
+  const mobileNextTarget =
+    mobileSide === 'left'
+      ? { spread: currentSpread, side: 'right' as const, index: currentIndex }
+      : { spread: nextSpread, side: 'left' as const, index: currentIndex + 1 };
+
+  const mobilePrevTarget =
+    mobileSide === 'right'
+      ? { spread: currentSpread, side: 'left' as const, index: currentIndex }
+      : prevSpread
+        ? { spread: prevSpread, side: 'right' as const, index: currentIndex - 1 }
+        : null;
+
+  const nextReveal: CurlPageDescriptor = showWelcome
+    ? {
+        spread: currentSpread,
+        side: isMobile ? mobileSide : 'right',
+        spreadIndex: currentIndex,
+        isContinuation: false,
+      }
+    : isMobile
+      ? {
+          spread: mobileNextTarget.spread,
+          side: mobileNextTarget.side,
+          spreadIndex: mobileNextTarget.index,
+          isContinuation: isContinuationSpread(
+            spreads,
+            mobileNextTarget.index,
+            mobileNextTarget.spread
+          ),
+        }
+      : {
+          spread: nextSpread,
+          side: 'right',
+          spreadIndex: currentIndex + 1,
+          isContinuation: isContinuationSpread(
+            spreads,
+            currentIndex + 1,
+            nextSpread
+          ),
+        };
+
+  const prevReveal: CurlPageDescriptor | null =
+    isMobile && mobilePrevTarget
+      ? {
+          spread: mobilePrevTarget.spread,
+          side: mobilePrevTarget.side,
+          spreadIndex: mobilePrevTarget.index,
+          isContinuation: isContinuationSpread(
+            spreads,
+            mobilePrevTarget.index,
+            mobilePrevTarget.spread
+          ),
+        }
+      : prevSpread
+        ? {
+            spread: prevSpread,
+            side: 'left',
+            spreadIndex: currentIndex - 1,
+            isContinuation: isContinuationSpread(
+              spreads,
+              currentIndex - 1,
+              prevSpread
+            ),
+          }
+        : null;
+
+  let flapBack: CurlPageDescriptor | null = null;
+  if (curlDirection === 'next') {
+    flapBack = showWelcome
+      ? {
+          spread: currentSpread,
+          side: isMobile ? mobileSide : 'left',
+          spreadIndex: currentIndex,
+          isContinuation: false,
+        }
+      : isMobile
+        ? {
+            spread: mobileNextTarget.spread,
+            side: mobileNextTarget.side,
+            spreadIndex: mobileNextTarget.index,
+            isContinuation: isContinuationSpread(
+              spreads,
+              mobileNextTarget.index,
+              mobileNextTarget.spread
+            ),
+          }
+        : {
+            spread: nextSpread,
+            side: 'left',
+            spreadIndex: currentIndex + 1,
+            isContinuation: isContinuationSpread(
+              spreads,
+              currentIndex + 1,
+              nextSpread
+            ),
+          };
+  } else if (curlDirection === 'prev') {
+    if (isMobile && mobilePrevTarget) {
+      flapBack = {
+        spread: mobilePrevTarget.spread,
+        side: mobilePrevTarget.side,
+        spreadIndex: mobilePrevTarget.index,
+        isContinuation: isContinuationSpread(
+          spreads,
+          mobilePrevTarget.index,
+          mobilePrevTarget.spread
+        ),
+      };
+    } else if (prevSpread) {
+      flapBack = {
+        spread: prevSpread,
+        side: 'right',
+        spreadIndex: currentIndex - 1,
+        isContinuation: isContinuationSpread(
+          spreads,
+          currentIndex - 1,
+          prevSpread
+        ),
+      };
+    }
+  }
+
+  return {
+    isCurrentContinuation,
+    nextReveal,
+    prevReveal,
+    flapBack,
   };
 }

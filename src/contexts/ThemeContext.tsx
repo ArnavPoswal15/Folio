@@ -5,13 +5,13 @@ import React, {
   useEffect,
   useState,
 } from 'react';
-import { JOURNAL_FONTS, JournalFontId } from '../types/journal';
+import { JOURNAL_FONTS, JOURNAL_STORAGE_KEYS } from '../constants/journal';
+import { JournalFontId } from '../types/journal';
 
+/** Active appearance theme mode for the desk and journal paper. */
 export type ThemeMode = 'light' | 'dark';
 
-const STORAGE_KEY = 'folio-theme';
-const FONT_STORAGE_KEY = 'folio-journal-font';
-
+/** React context shape exposing theme toggles and journal writing font state. */
 interface ThemeContextValue {
   theme: ThemeMode;
   isDark: boolean;
@@ -21,6 +21,7 @@ interface ThemeContextValue {
   setJournalFont: (font: JournalFontId) => void;
 }
 
+/** React context holding appearance theme and selected writing font. */
 const ThemeContext = createContext<ThemeContextValue>({
   theme: 'light',
   isDark: false,
@@ -30,13 +31,17 @@ const ThemeContext = createContext<ThemeContextValue>({
   setJournalFont: () => {},
 });
 
+/**
+ * Resolves the initial theme from DOM class, localStorage, or OS preference.
+ * @returns Initial `'light'` or `'dark'` theme mode.
+ */
 function getInitialTheme(): ThemeMode {
   if (typeof document !== 'undefined') {
     if (document.documentElement.classList.contains('dark')) {
       return 'dark';
     }
     try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
+      const saved = window.localStorage.getItem(JOURNAL_STORAGE_KEYS.THEME);
       if (saved === 'dark' || saved === 'light') {
         return saved;
       }
@@ -53,10 +58,14 @@ function getInitialTheme(): ThemeMode {
   return 'light';
 }
 
+/**
+ * Reads the persisted writing font identifier from localStorage or defaults to `'caveat'`.
+ * @returns Initial JournalFontId for prose display and typing.
+ */
 function getInitialFont(): JournalFontId {
   if (typeof window !== 'undefined') {
     try {
-      const saved = window.localStorage.getItem(FONT_STORAGE_KEY);
+      const saved = window.localStorage.getItem(JOURNAL_STORAGE_KEYS.FONT);
       if (saved && saved in JOURNAL_FONTS) {
         return saved as JournalFontId;
       }
@@ -67,6 +76,11 @@ function getInitialFont(): JournalFontId {
   return 'caveat';
 }
 
+/**
+ * Provides theme state, OS color-scheme synchronization, and journal font selection to the app tree.
+ * @param props - Children elements wrapped by the theme provider.
+ * @returns ThemeContext provider wrapping child nodes.
+ */
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -78,13 +92,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
-  // Track OS preference only when user has not explicitly picked a theme
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const onChange = (e: MediaQueryListEvent) => {
       try {
-        const saved = window.localStorage.getItem(STORAGE_KEY);
+        const saved = window.localStorage.getItem(JOURNAL_STORAGE_KEYS.THEME);
         if (saved === 'light' || saved === 'dark') return;
       } catch {
         // Ignore storage access errors
@@ -98,7 +111,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   const setTheme = useCallback((next: ThemeMode) => {
     setThemeState(next);
     try {
-      window.localStorage.setItem(STORAGE_KEY, next);
+      window.localStorage.setItem(JOURNAL_STORAGE_KEYS.THEME, next);
     } catch {
       // Ignore storage write errors
     }
@@ -108,7 +121,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     setThemeState((prev) => {
       const next: ThemeMode = prev === 'dark' ? 'light' : 'dark';
       try {
-        window.localStorage.setItem(STORAGE_KEY, next);
+        window.localStorage.setItem(JOURNAL_STORAGE_KEYS.THEME, next);
       } catch {
         // Ignore storage write errors
       }
@@ -119,7 +132,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   const setJournalFont = useCallback((next: JournalFontId) => {
     setJournalFontState(next);
     try {
-      window.localStorage.setItem(FONT_STORAGE_KEY, next);
+      window.localStorage.setItem(JOURNAL_STORAGE_KEYS.FONT, next);
     } catch {
       // Ignore storage write errors
     }
@@ -141,6 +154,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 };
 
+/**
+ * Reads the current theme and writing font context values.
+ * @returns Active ThemeContextValue with toggles and setters.
+ */
 export function useTheme(): ThemeContextValue {
   return useContext(ThemeContext);
 }

@@ -1,31 +1,22 @@
-import { formatJournalDateParts } from '../data/initialEntries';
-import { formatLocalIsoDate, INK_COLORS, JournalSpread } from '../types/journal';
+import {
+  EXPORT_CSV_HEADERS,
+  EXPORT_DURATION_OPTIONS,
+} from '../constants/export';
+import { INK_COLORS } from '../constants/ink';
+import { ExportDurationId } from '../types/export';
+import { JournalSpread } from '../types/journal';
+import {
+  formatJournalDateParts,
+  formatLocalIsoDate,
+  parseIsoLocal,
+} from './date';
 
-export type ExportDurationId = '1w' | '2w' | '1m' | '3m' | '6m' | '12m' | 'all';
-
-export interface ExportDurationOption {
-  id: ExportDurationId;
-  label: string;
-  shortLabel: string;
-}
-
-export const EXPORT_DURATION_OPTIONS: ExportDurationOption[] = [
-  { id: '1w', label: '1 Week', shortLabel: '1-week' },
-  { id: '2w', label: '2 Weeks', shortLabel: '2-weeks' },
-  { id: '1m', label: '1 Month', shortLabel: '1-month' },
-  { id: '3m', label: '3 Months', shortLabel: '3-months' },
-  { id: '6m', label: '6 Months', shortLabel: '6-months' },
-  { id: '12m', label: '12 Months', shortLabel: '12-months' },
-  { id: 'all', label: 'All Time', shortLabel: 'all-time' },
-];
-
-function parseIsoLocal(isoDate: string): Date | null {
-  const parts = isoDate.split('-').map(Number);
-  if (parts.length !== 3 || parts.some(Number.isNaN)) return null;
-  const [y, m, d] = parts;
-  return new Date(y, m - 1, d);
-}
-
+/**
+ * Computes the inclusive cutoff local Date for a CSV export duration option.
+ * @param duration - Selected export duration window identifier.
+ * @param referenceDate - Reference calendar date (defaults to current date).
+ * @returns Cutoff local Date at midnight, or null for `'all'`.
+ */
 export function getCutoffDateForDuration(
   duration: ExportDurationId,
   referenceDate: Date = new Date()
@@ -61,6 +52,13 @@ export function getCutoffDateForDuration(
   }
 }
 
+/**
+ * Filters and sorts spreads ascending by date within the requested export window.
+ * @param spreads - Full array of journal spreads.
+ * @param duration - Selected export duration window identifier.
+ * @param referenceDate - Reference calendar date for cutoff math.
+ * @returns Filtered spreads ordered chronologically.
+ */
 export function filterSpreadsByDuration(
   spreads: JournalSpread[],
   duration: ExportDurationId,
@@ -77,7 +75,12 @@ export function filterSpreadsByDuration(
   });
 }
 
-function escapeCsvCell(value: string): string {
+/**
+ * Neutralizes CSV formula injection and properly quotes commas, quotes, and newlines.
+ * @param value - Raw cell string value.
+ * @returns RFC-4180 escaped and formula-safe CSV cell string.
+ */
+export function escapeCsvCell(value: string): string {
   const normalized = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const formulaSafe = /^[=+\-@\t]/.test(normalized)
     ? `'${normalized}`
@@ -92,18 +95,12 @@ function escapeCsvCell(value: string): string {
   return formulaSafe;
 }
 
+/**
+ * Serializes journal spreads into a UTF-8 BOM prefixed CSV document for Excel compatibility.
+ * @param spreads - Ordered array of spreads to include.
+ * @returns Full CSV string with CRLF line endings.
+ */
 export function buildJournalCsv(spreads: JournalSpread[]): string {
-  const headers = [
-    'Date',
-    'Weekday',
-    'Setting / Mood',
-    'Ink Tone',
-    'Paper Style',
-    'Left Page',
-    'Right Page',
-    'Last Updated',
-  ];
-
   const rows = spreads.map((spread) => {
     const dateParts = formatJournalDateParts(spread.date);
     const inkLabel = INK_COLORS[spread.inkColor]?.label ?? spread.inkColor;
@@ -125,10 +122,18 @@ export function buildJournalCsv(spreads: JournalSpread[]): string {
       .join(',');
   });
 
-  // Prefix UTF-8 BOM for clean Unicode / Excel compatibility
-  return '\uFEFF' + [headers.map(escapeCsvCell).join(','), ...rows].join('\r\n');
+  return (
+    '\uFEFF' +
+    [EXPORT_CSV_HEADERS.map(escapeCsvCell).join(','), ...rows].join('\r\n')
+  );
 }
 
+/**
+ * Generates and triggers a browser file download of matching spreads as CSV.
+ * @param spreads - All journal spreads in the store.
+ * @param duration - Selected export duration window identifier.
+ * @returns Number of exported spreads included in the downloaded file.
+ */
 export function downloadJournalCsv(
   spreads: JournalSpread[],
   duration: ExportDurationId
