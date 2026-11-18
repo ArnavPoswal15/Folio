@@ -1,4 +1,6 @@
+import { Moon, Sun } from 'lucide-react';
 import React from 'react';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface WelcomeSpreadContentProps {
   side: 'left' | 'right';
@@ -35,10 +37,28 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
   onCloseBook,
   onClearAuthError,
 }) => {
+  const { isDark, toggleTheme } = useTheme();
   const scaleRatio = Math.min(1, Math.max(0.76, pageW / 470));
   const paddingX = Math.round(isMobile ? 24 : 42 * scaleRatio);
   const paddingTop = Math.round(isMobile ? 20 : 30 * scaleRatio);
   const paddingBottom = Math.round(isMobile ? 18 : 26 * scaleRatio);
+
+  const renderThemeToggle = () => (
+    <button
+      type="button"
+      disabled={!interactive || locked}
+      onClick={() => interactive && !locked && toggleTheme()}
+      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      className="inline-flex items-center justify-center p-1 rounded text-[#6d5d4b] dark:text-[#9f917f] hover:text-[#261f19] dark:hover:text-[#ece3d4] transition-colors cursor-pointer shrink-0 disabled:opacity-45 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#57361e] dark:focus-visible:ring-[#deb488]"
+    >
+      {isDark ? (
+        <Sun className="w-3.5 h-3.5" strokeWidth={1.75} />
+      ) : (
+        <Moon className="w-3.5 h-3.5" strokeWidth={1.75} />
+      )}
+    </button>
+  );
 
   return (
     <div
@@ -56,77 +76,64 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
       {isMobile ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-0 w-7"
-          style={{
-            background:
-              'linear-gradient(to right, rgba(38, 27, 16, 0.14) 0%, transparent 100%)',
-          }}
+          className="pointer-events-none absolute inset-y-0 left-0 w-7 spine-gutter-mobile"
         />
       ) : side === 'left' ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 right-0 w-12"
-          style={{
-            background:
-              'linear-gradient(to left, rgba(38, 27, 16, 0.17) 0%, rgba(38, 27, 16, 0.06) 42%, transparent 100%)',
-          }}
+          className="pointer-events-none absolute inset-y-0 right-0 w-12 spine-gutter-left"
         />
       ) : (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-0 w-12"
-          style={{
-            background:
-              'linear-gradient(to right, rgba(38, 27, 16, 0.16) 0%, rgba(38, 27, 16, 0.05) 42%, transparent 100%)',
-          }}
+          className="pointer-events-none absolute inset-y-0 left-0 w-12 spine-gutter-right"
         />
       )}
 
       {/* Subtle outer paper edge highlight */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0"
-        style={{
-          boxShadow:
-            side === 'left'
-              ? 'inset 1px 0 0 rgba(255,255,255,0.55)'
-              : 'inset -1px 0 0 rgba(255,255,255,0.55)',
-        }}
+        className={`pointer-events-none absolute inset-0 ${
+          side === 'left' ? 'paper-edge-left' : 'paper-edge-right'
+        }`}
       />
 
       {isMobile ? (
         <>
-          <div className="relative z-10 pb-2.5 mb-4 border-b border-[#7c6952]/20 flex items-center justify-between">
-            <span className="font-serif text-base font-medium text-[#261f19]">
+          <div className="relative z-10 pb-2.5 mb-4 border-b border-[#7c6952]/20 dark:border-[#423a32] flex items-center justify-between">
+            <span className="font-serif text-base font-medium text-[#261f19] dark:text-[#ece3d4]">
               Folio
             </span>
-            <button
-              type="button"
-              disabled={!interactive || locked}
-              onClick={() => interactive && !locked && onCloseBook?.()}
-              className="text-xs text-[#6d5d4b] hover:text-[#261f19] cursor-pointer whitespace-nowrap shrink-0"
-            >
-              Close
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              {renderThemeToggle()}
+              <button
+                type="button"
+                disabled={!interactive || locked}
+                onClick={() => interactive && !locked && onCloseBook?.()}
+                className="text-xs text-[#6d5d4b] dark:text-[#9f917f] hover:text-[#261f19] dark:hover:text-[#ece3d4] cursor-pointer whitespace-nowrap shrink-0"
+              >
+                Close
+              </button>
+            </div>
           </div>
 
           <div className="relative z-10 flex-1 flex flex-col justify-between min-h-0">
             <div>
-              <h1 className="font-serif text-[26px] leading-tight font-semibold text-[#261f19]">
+              <h1 className="font-serif text-[26px] leading-tight font-semibold text-[#261f19] dark:text-[#ece3d4]">
                 Your Daily Journal
               </h1>
-              <p className="mt-2 text-sm leading-relaxed text-[#5c4f41]">
+              <p className="mt-2 text-sm leading-relaxed text-[#5c4f41] dark:text-[#bfb19e]">
                 Sign in with Google for your synced journal, or try as a guest
                 on this device.
               </p>
 
-              <div className="mt-5 space-y-2.5 border-t border-[#7c6952]/15 pt-4">
+              <div className="mt-5 space-y-2.5 border-t border-[#7c6952]/15 dark:border-[#423a32] pt-4">
                 {ONBOARDING_STEPS.map((step) => (
                   <div
                     key={step.num}
-                    className="flex items-baseline gap-2.5 text-[13px] text-[#4a3e33]"
+                    className="flex items-baseline gap-2.5 text-[13px] text-[#4a3e33] dark:text-[#c9bba8]"
                   >
-                    <span className="text-xs text-[#8a7966] tabular-nums shrink-0">
+                    <span className="text-xs text-[#8a7966] dark:text-[#968775] tabular-nums shrink-0">
                       {step.num}
                     </span>
                     <span>{step.text}</span>
@@ -137,7 +144,7 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
 
             <div className="pt-4 space-y-2.5">
               {authError ? (
-                <div className="p-2.5 rounded border border-[#8c2d2d]/30 bg-[#8c2d2d]/5 text-xs text-[#732323] flex items-center justify-between gap-2">
+                <div className="p-2.5 rounded border border-[#8c2d2d]/30 dark:border-[#b84a45]/45 bg-[#8c2d2d]/5 dark:bg-[#331a1a]/80 text-xs text-[#732323] dark:text-[#f0a8a3] flex items-center justify-between gap-2">
                   <span>{authError}</span>
                   <button
                     type="button"
@@ -153,7 +160,7 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
                 type="button"
                 disabled={!interactive || locked || authBusy}
                 onClick={() => interactive && !locked && onSignInWithGoogle?.()}
-                className="w-full min-h-[44px] px-4 py-2.5 rounded bg-[#3a231c] text-[#f6f1e6] text-sm font-medium hover:bg-[#4c2e25] disabled:opacity-55 transition-colors cursor-pointer"
+                className="w-full min-h-[44px] px-4 py-2.5 rounded bg-[#3a231c] dark:bg-[#d7c4a5] text-[#f6f1e6] dark:text-[#1b1511] text-sm font-medium hover:bg-[#4c2e25] dark:hover:bg-[#e5d5ba] disabled:opacity-55 transition-colors cursor-pointer"
               >
                 {authBusy ? 'Signing in…' : 'Continue with Google'}
               </button>
@@ -162,7 +169,7 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
                 type="button"
                 disabled={!interactive || locked || authBusy}
                 onClick={() => interactive && !locked && onContinueLocal?.()}
-                className="w-full min-h-[42px] px-4 py-2 rounded border border-[#8c7960]/35 bg-[#efe8da] text-[#3b2f24] text-sm hover:border-[#57361e] disabled:opacity-55 transition-colors cursor-pointer"
+                className="w-full min-h-[42px] px-4 py-2 rounded border border-[#8c7960]/35 dark:border-[#4b4238] bg-[#efe8da] dark:bg-[#26221e] text-[#3b2f24] dark:text-[#e5dac9] text-sm hover:border-[#57361e] dark:hover:border-[#deb488]/60 disabled:opacity-55 transition-colors cursor-pointer"
               >
                 Try as Guest →
               </button>
@@ -172,21 +179,21 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
       ) : side === 'left' ? (
         <>
           <div className="relative z-10 flex-1 flex flex-col justify-center py-6 min-h-0">
-            <h1 className="font-serif text-[34px] leading-tight font-semibold text-[#261f19] tracking-tight">
+            <h1 className="font-serif text-[34px] leading-tight font-semibold text-[#261f19] dark:text-[#ece3d4] tracking-tight">
               Folio
             </h1>
-            <p className="mt-2 font-hand text-[24px] leading-[30px] text-[#57361e]">
+            <p className="mt-2 font-hand ink-prose text-[24px] leading-[30px] text-[#57361e] dark:text-[#deb488]">
               A quiet notebook for everyday pages.
             </p>
-            <div className="mt-5 w-12 h-px bg-[#8c7960]/40" />
+            <div className="mt-5 w-12 h-px bg-[#8c7960]/40 dark:bg-[#52483e]" />
 
             <div className="mt-7 space-y-3.5">
               {ONBOARDING_STEPS.map((step) => (
                 <div
                   key={step.num}
-                  className="flex items-baseline gap-3 text-[14px] leading-snug text-[#4f4235]"
+                  className="flex items-baseline gap-3 text-[14px] leading-snug text-[#4f4235] dark:text-[#c9bba8]"
                 >
-                  <span className="text-xs text-[#8a7966] tabular-nums shrink-0">
+                  <span className="text-xs text-[#8a7966] dark:text-[#968775] tabular-nums shrink-0">
                     {step.num}
                   </span>
                   <span>{step.text}</span>
@@ -195,34 +202,35 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
             </div>
           </div>
 
-          <div className="relative z-10 pt-2 text-xs text-[#8a7966]">
+          <div className="relative z-10 pt-2 text-xs text-[#8a7966] dark:text-[#968775]">
             Guest preview · Saved in your browser
           </div>
         </>
       ) : (
         <>
-          <div className="relative z-10 pb-2.5 mb-2 flex items-center justify-end">
+          <div className="relative z-10 pb-2.5 mb-2 flex items-center justify-end gap-2">
+            {renderThemeToggle()}
             <button
               type="button"
               disabled={!interactive || locked}
               onClick={() => interactive && !locked && onCloseBook?.()}
-              className="text-[12.5px] text-[#6d5d4b] hover:text-[#261f19] transition-colors cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:underline"
+              className="text-[12.5px] text-[#6d5d4b] dark:text-[#9f917f] hover:text-[#261f19] dark:hover:text-[#ece3d4] transition-colors cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:underline"
             >
               Close
             </button>
           </div>
 
           <div className="relative z-10 flex-1 flex flex-col justify-center py-4 min-h-0">
-            <h2 className="font-serif text-[28px] leading-tight font-semibold text-[#261f19]">
+            <h2 className="font-serif text-[28px] leading-tight font-semibold text-[#261f19] dark:text-[#ece3d4]">
               Open Your Journal
             </h2>
-            <p className="mt-2.5 text-[15px] leading-relaxed text-[#5c4f41]">
+            <p className="mt-2.5 text-[15px] leading-relaxed text-[#5c4f41] dark:text-[#bfb19e]">
               Sign in with Google to view your synced notebooks across all
               devices, or explore as a guest first.
             </p>
 
             {authError ? (
-              <div className="mt-4 p-3 rounded border border-[#8c2d2d]/30 bg-[#8c2d2d]/5 text-xs text-[#732323] flex items-center justify-between gap-2">
+              <div className="mt-4 p-3 rounded border border-[#8c2d2d]/30 dark:border-[#b84a45]/45 bg-[#8c2d2d]/5 dark:bg-[#331a1a]/80 text-xs text-[#732323] dark:text-[#f0a8a3] flex items-center justify-between gap-2">
                 <span>{authError}</span>
                 <button
                   type="button"
@@ -239,7 +247,7 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
                 type="button"
                 disabled={!interactive || locked || authBusy}
                 onClick={() => interactive && !locked && onSignInWithGoogle?.()}
-                className="w-full min-h-[44px] px-5 py-2.5 rounded bg-[#3a231c] text-[#f6f1e6] text-sm font-medium hover:bg-[#4c2e25] disabled:opacity-55 transition-colors cursor-pointer"
+                className="w-full min-h-[44px] px-5 py-2.5 rounded bg-[#3a231c] dark:bg-[#d7c4a5] text-[#f6f1e6] dark:text-[#1b1511] text-sm font-medium hover:bg-[#4c2e25] dark:hover:bg-[#e5d5ba] disabled:opacity-55 transition-colors cursor-pointer"
               >
                 {authBusy ? 'Signing in…' : 'Continue with Google'}
               </button>
@@ -248,13 +256,13 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
                 type="button"
                 disabled={!interactive || locked || authBusy}
                 onClick={() => interactive && !locked && onContinueLocal?.()}
-                className="w-full min-h-[42px] px-5 py-2 rounded border border-[#8c7960]/35 bg-[#efe8da] text-[#3b2f24] text-sm hover:border-[#57361e] disabled:opacity-55 transition-colors cursor-pointer"
+                className="w-full min-h-[42px] px-5 py-2 rounded border border-[#8c7960]/35 dark:border-[#4b4238] bg-[#efe8da] dark:bg-[#26221e] text-[#3b2f24] dark:text-[#e5dac9] text-sm hover:border-[#57361e] dark:hover:border-[#deb488]/60 disabled:opacity-55 transition-colors cursor-pointer"
               >
                 Try as Guest →
               </button>
             </div>
 
-            <p className="mt-4 text-xs text-[#7a6855]">
+            <p className="mt-4 text-xs text-[#7a6855] dark:text-[#9f917f]">
               Any notes written as a guest merge automatically if you sign in
               later.
             </p>
@@ -268,11 +276,7 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
       {(interactive || isMobile) && side === 'right' ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-0 right-0 z-10 w-5 h-5 opacity-45"
-          style={{
-            background:
-              'linear-gradient(135deg, transparent 50%, rgba(155, 134, 108, 0.22) 52%, rgba(255, 252, 245, 0.55) 100%)',
-          }}
+          className="pointer-events-none absolute bottom-0 right-0 z-10 w-5 h-5 opacity-45 corner-sheen-right"
         />
       ) : null}
     </div>

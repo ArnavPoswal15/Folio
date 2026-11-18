@@ -1,9 +1,11 @@
+import { Moon, Sun } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AccountModal } from './components/AccountModal';
 import { EntriesIndexModal } from './components/EntriesIndexModal';
 import { ExportJournalModal } from './components/ExportJournalModal';
 import { BookPhase, PageCurlStage } from './components/PageCurlStage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { useJournalStore } from './hooks/useJournalStore';
 import { RecordingTarget, useVoiceRecorder } from './hooks/useVoiceRecorder';
 import { TurnDirection } from './utils/pageCurlGeometry';
@@ -63,17 +65,17 @@ class JournalErrorBoundary extends React.Component<
     if (this.state.hasError) {
       return (
         <div className="w-screen h-screen desk-surface flex items-center justify-center p-6">
-          <div className="paper-grain rounded-lg p-8 max-w-md text-center shadow-2xl border border-[#bcae97]">
-            <h1 className="font-serif text-2xl font-semibold text-[#261f19]">
+          <div className="paper-grain rounded-lg p-8 max-w-md text-center shadow-2xl border border-[#bcae97] dark:border-[#3d362e]">
+            <h1 className="font-serif text-2xl font-semibold text-[#261f19] dark:text-[#ece3d4]">
               Unable to display journal page
             </h1>
-            <p className="mt-2 text-sm text-[#6d5d4b]">
+            <p className="mt-2 text-sm text-[#6d5d4b] dark:text-[#9f917f]">
               Your entries remain saved safely. Reload to reopen the book.
             </p>
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="mt-5 px-5 py-2 text-sm font-medium bg-[#3a231c] text-[#f6f1e6] rounded hover:bg-[#4c2e25] transition-colors cursor-pointer"
+              className="mt-5 px-5 py-2 text-sm font-medium bg-[#3a231c] dark:bg-[#d7c4a5] text-[#f6f1e6] dark:text-[#1b1511] rounded hover:bg-[#4c2e25] dark:hover:bg-[#e5d5ba] transition-colors cursor-pointer"
             >
               Reopen Journal
             </button>
@@ -86,6 +88,7 @@ class JournalErrorBoundary extends React.Component<
 }
 
 function JournalWorkspace() {
+  const { isDark, toggleTheme } = useTheme();
   const {
     user,
     authReady,
@@ -251,6 +254,34 @@ function JournalWorkspace() {
 
   return (
     <main className="relative w-screen h-[100dvh] desk-surface flex flex-col items-center justify-center overflow-hidden px-2">
+      {/* Quiet desk appearance toggle visible when closed */}
+      <div
+        className={`fixed top-4 right-5 z-30 transition-opacity duration-300 ${
+          bookPhase === 'closed' ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
+        <button
+          type="button"
+          onClick={toggleTheme}
+          disabled={bookPhase !== 'closed'}
+          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#8c7960]/30 dark:border-[#4b4238] bg-[#faf6ed]/75 dark:bg-[#1f1c19]/85 text-xs text-[#4a3d30] dark:text-[#d5c8b6] hover:border-[#57361e]/60 dark:hover:border-[#deb488]/50 hover:text-[#261f19] dark:hover:text-[#ece3d4] transition-colors cursor-pointer whitespace-nowrap shrink-0 min-h-[36px] backdrop-blur-[2px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#57361e] dark:focus-visible:ring-[#deb488]"
+        >
+          {isDark ? (
+            <>
+              <Sun className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <span>Light</span>
+            </>
+          ) : (
+            <>
+              <Moon className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <span>Dark</span>
+            </>
+          )}
+        </button>
+      </div>
+
       <PageCurlStage
         spreads={spreads}
         currentIndex={currentIndex}
@@ -286,13 +317,13 @@ function JournalWorkspace() {
           bookPhase === 'closed' ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
-        <p className="text-sm tracking-wide font-serif italic text-[#5c4f41] opacity-85">
+        <p className="text-sm tracking-wide font-serif italic text-[#5c4f41] dark:text-[#b2a390] opacity-85">
           Click the book to open
         </p>
 
         {authReady ? (
           user ? (
-            <div className="flex items-center gap-2 text-xs text-[#6d5d4b]">
+            <div className="flex items-center gap-2 text-xs text-[#6d5d4b] dark:text-[#9f917f]">
               <span className="truncate max-w-[230px] sm:max-w-xs">
                 Synced as {user.email}
               </span>
@@ -301,7 +332,7 @@ function JournalWorkspace() {
                 type="button"
                 disabled={authBusy || bookPhase !== 'closed'}
                 onClick={() => void handleSignOut()}
-                className="text-[#4a3b2c] hover:text-[#261f19] underline underline-offset-2 cursor-pointer whitespace-nowrap shrink-0"
+                className="text-[#4a3b2c] dark:text-[#d6c7b4] hover:text-[#261f19] dark:hover:text-[#ece3d4] underline underline-offset-2 cursor-pointer whitespace-nowrap shrink-0"
               >
                 {authBusy ? 'Signing out…' : 'Sign out'}
               </button>
@@ -311,7 +342,7 @@ function JournalWorkspace() {
               type="button"
               disabled={authBusy || bookPhase !== 'closed'}
               onClick={() => void signInWithGoogle()}
-              className="text-xs text-[#57361e] hover:text-[#261f19] underline underline-offset-2 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
+              className="text-xs text-[#57361e] dark:text-[#deb488] hover:text-[#261f19] dark:hover:text-[#f2e7d5] underline underline-offset-2 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
             >
               {authBusy
                 ? 'Connecting Google account…'
@@ -324,7 +355,7 @@ function JournalWorkspace() {
       </div>
 
       {bookPhase === 'closed' && authError ? (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-md flex items-center gap-2 text-xs text-[#732323] bg-[#faf6ed]/95 border border-[#8c2d2d]/30 rounded px-3.5 py-2 shadow-sm text-center">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-md flex items-center gap-2 text-xs text-[#732323] dark:text-[#f0a8a3] bg-[#faf6ed]/95 dark:bg-[#2a1919]/95 border border-[#8c2d2d]/30 dark:border-[#b84a45]/45 rounded px-3.5 py-2 shadow-sm text-center">
           <span>{authError}</span>
           <button
             type="button"
@@ -376,10 +407,12 @@ function JournalWorkspace() {
 
 export default function App() {
   return (
-    <JournalErrorBoundary>
-      <AuthProvider>
-        <JournalWorkspace />
-      </AuthProvider>
-    </JournalErrorBoundary>
+    <ThemeProvider>
+      <JournalErrorBoundary>
+        <AuthProvider>
+          <JournalWorkspace />
+        </AuthProvider>
+      </JournalErrorBoundary>
+    </ThemeProvider>
   );
 }

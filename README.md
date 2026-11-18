@@ -4,15 +4,16 @@
 
 Folio is a digital journal designed to feel like opening a book. Write on customizable paper, turn pages with a natural curl, and keep your entries on your device or sync them across devices.
 
-**Live app:** [folio-journal on Google Cloud](https://folio-journal-book.ai.studio/)
+**Live app:** [folio-journal on Google Cloud](https://folio-journal-book.ai.studio/) · **Latest release:** [`v1.1.0`](./CHANGELOG.md)
 
 ## Features
 
 - **A book-like writing experience** with 3D cover opening, drag-to-fold GSAP page curls, and responsive desktop/mobile spreads.
+- **Light & dark mode** — switches between a warm ivory-paper studio desk and a charcoal cotton-paper night desk with adaptive high-contrast inks, system preference detection, and zero-flash persistence (`folio-theme`).
 - **Your page, your way** with ruled, dotted, or blank paper and three ink colors (`charcoal`, `midnight`, `sepia`).
 - **Voice dictation** powered by Groq Whisper (`whisper-large-v3-turbo`) with Gemini fallback, client-side silence check, and quiet-mic WAV boost.
-- **Guest mode & cloud sync** — entries persist locally in `localStorage` out of the box, with optional Google Sign-In and Firestore sync.
-- **Entries index & CSV export** to search, jump across spreads, or back up your writing.
+- **Guest mode & clean cloud sync** — guest entries persist locally in `localStorage` and merge on sign-in, while signed-in accounts start directly with a clean dated spread synced via Google Sign-In and Cloud Firestore.
+- **Entries index & CSV export** with date sorting, month and custom range filtering, local calendar dates, and spreadsheet formula-injection protection.
 
 > **Preview & Screenshots:** Open the [live app](https://folio-journal-book.ai.studio/) to try the interactive book cover and page curl. *(Add captured screenshots or a page-turn demo GIF under `docs/` when publishing showcase media.)*
 
@@ -37,15 +38,15 @@ flowchart LR
   Express -- "Server-side GROQ_API_KEY / GEMINI_API_KEY" --> STT
 ```
 
-### Voice Transcription Protection
+### Security & Voice Transcription Protection
 
-`POST /api/transcribe` is protected server-side before invoking Gemini:
+`POST /api/transcribe` and the Express server enforce layered protections before invoking Groq Whisper or Gemini:
 
-- **Authentication:** Requires a verified Firebase Auth ID token (`Authorization: Bearer <token>`), validated against Google's x509 certificates.
+- **Authentication:** Requires a verified Firebase Auth ID token (`Authorization: Bearer <token>`), validated against Google's x509 certificates (fetched with an `8s` timeout).
 - **Rate limiting:** Sliding-window per-IP (`15 req/min`) and per-user (`8 req/min`) limits returning `429` + `Retry-After` headers.
 - **Daily quotas:** Per-user (`60 requests/day`, `900s` total audio/day) and global daily circuit breaker (`1000 requests/day`).
-- **Payload & duration validation:** `9 MB` JSON body cap, `6 MB` WAV / `3 MB` compressed audio cap, container magic-byte inspection, and server-side WAV header duration check (`0.2s`–`185s`).
-- **Audit logging:** Structured JSON logs (`uid` prefix, hashed IP, duration, bytes, latency, outcome) without logging audio or transcript text.
+- **Payload & duration validation:** `9 MB` JSON body cap (`100 KB` on other routes), `6 MB` WAV / `3 MB` compressed audio cap, container magic-byte inspection, and server-side WAV header duration check (`0.2s`–`185s`).
+- **HTTP hardening & audit logging:** Disables `x-powered-by`, sets `X-Content-Type-Options: nosniff` and `Referrer-Policy: strict-origin-when-cross-origin`, and writes structured JSON audit logs (`uid` prefix, hashed IP, duration, bytes, latency, outcome) without logging audio or transcript text.
 
 ---
 
@@ -85,13 +86,13 @@ Guest mode stores an array of `JournalSpread` objects locally in browser `localS
 
 ```mermaid
 flowchart LR
-  Source["Repository Source\n(Dockerfile: node:22-slim)"] --> Build["Container Build\n(npm install + npm run build)"]
+  Source["Repository Source\n(Dockerfile: node:22-slim)"] --> Build["Container Build\n(npm install + npm run build\n+ npm prune --omit=dev)"]
   Build --> Server["Production Server (PORT=8080)\nNODE_ENV=production node server.ts"]
   Server --> Static["Serves Vite dist/ SPA"]
   Server --> API["Serves /api/transcribe & /api/health"]
 ```
 
-- **Container:** `Dockerfile` uses `node:22-slim`, builds static assets with `npm run build`, and runs `node server.ts` on port `8080`.
+- **Container:** `Dockerfile` uses `node:22-slim`, builds static assets with `npm run build`, prunes `devDependencies` with `npm prune --omit=dev`, and runs `node server.ts` on port `8080`.
 
 ---
 
@@ -150,4 +151,4 @@ To use Google Sign-In and Firestore sync on your own Firebase project, update `f
 
 ## Built with
 
-React · TypeScript · Vite · Tailwind CSS · GSAP · Express · Firebase · Google GenAI
+React · TypeScript · Vite · Tailwind CSS · GSAP · Express · Firebase · Groq Whisper · Google GenAI

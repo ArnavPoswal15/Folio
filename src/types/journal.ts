@@ -24,22 +24,34 @@ export interface JournalSpread {
 
 export const INK_COLORS: Record<
   InkColorId,
-  { label: string; hex: string; swatch: string }
+  {
+    label: string;
+    hex: string;
+    swatch: string;
+    darkHex: string;
+    darkSwatch: string;
+  }
 > = {
   charcoal: {
     label: 'Charcoal Ink',
     hex: '#24201c',
     swatch: '#2a2520',
+    darkHex: '#e8dfd1',
+    darkSwatch: '#dcd1bf',
   },
   midnight: {
     label: 'Fountain Blue',
     hex: '#1c3554',
     swatch: '#224268',
+    darkHex: '#9bbce8',
+    darkSwatch: '#85abde',
   },
   sepia: {
     label: 'Warm Sepia',
     hex: '#57361e',
     swatch: '#6b4226',
+    darkHex: '#deb488',
+    darkSwatch: '#d4a472',
   },
 };
 
@@ -58,9 +70,16 @@ export function sanitizeSpreadId(rawId: string): string {
     : `spread-${Date.now()}`;
 }
 
+export function formatLocalIsoDate(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function sanitizeIsoDate(rawDate: string): string {
   if (SPREAD_LIMITS.DATE_PATTERN.test(rawDate)) return rawDate;
-  return new Date().toISOString().slice(0, 10);
+  return formatLocalIsoDate();
 }
 
 export function sanitizeSpreadPayload(spread: JournalSpread): JournalSpread {

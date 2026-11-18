@@ -1,5 +1,6 @@
 import gsap from 'gsap';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useTheme } from '../contexts/ThemeContext';
 import { formatJournalDateParts } from '../data/initialEntries';
 import { JournalSpread } from '../types/journal';
 import { VoiceControl } from '../hooks/useVoiceRecorder';
@@ -94,6 +95,7 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
   onCloseBook,
   voiceControl,
 }) => {
+  const { isDark } = useTheme();
   const spreadRef = useRef<HTMLDivElement | null>(null);
   const bookWrapperRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
@@ -734,6 +736,9 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
 
   const renderFoldShadow = () => {
     if (!curl) return null;
+    const shadowRgb = isDark ? '4, 3, 2' : '22, 15, 9';
+    const peakAlpha = isDark ? 0.44 : 0.26;
+    const midAlpha = isDark ? 0.16 : 0.09;
     return (
       <div
         style={{
@@ -752,10 +757,10 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
             bottom: 0,
             right: '50%',
             width: `${Math.round(40 + curl.intensity * 36)}px`,
-            background: `linear-gradient(to left, rgba(22, 15, 9, ${(
-              0.26 * curl.intensity
-            ).toFixed(3)}) 0%, rgba(22, 15, 9, ${(
-              0.09 * curl.intensity
+            background: `linear-gradient(to left, rgba(${shadowRgb}, ${(
+              peakAlpha * curl.intensity
+            ).toFixed(3)}) 0%, rgba(${shadowRgb}, ${(
+              midAlpha * curl.intensity
             ).toFixed(3)}) 45%, transparent 100%)`,
           }}
         />
@@ -786,32 +791,22 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
         {/* ================= UNIFIED HARDBOUND FRAME + OPEN SPREAD ================= */}
         <div
           ref={frameRef}
-          className="relative cover-cloth rounded-xl p-[11px]"
+          className="relative cover-cloth book-frame-shadow rounded-xl p-[11px]"
           style={{
             width: `${stageW + 22}px`,
             height: `${fullBookH}px`,
-            boxShadow:
-              '0 22px 48px rgba(34, 26, 18, 0.34), 0 8px 18px rgba(34, 26, 18, 0.22), inset 0 1px 1px rgba(255, 240, 220, 0.14)',
           }}
         >
           {/* Layered paper stack thickness along outer edges */}
           {!isMobile ? (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute top-[14px] bottom-[14px] left-[6px] w-[5px] rounded-l-sm"
-              style={{
-                background:
-                  'repeating-linear-gradient(to right, #cfc3ae 0px, #ece3d2 1px, #cbbda4 2px)',
-              }}
+              className="pointer-events-none absolute top-[14px] bottom-[14px] left-[6px] w-[5px] rounded-l-sm paper-stack-left"
             />
           ) : null}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute top-[14px] bottom-[14px] right-[6px] w-[5px] rounded-r-sm"
-            style={{
-              background:
-                'repeating-linear-gradient(to right, #cbbda4 0px, #ece3d2 1px, #cfc3ae 2px)',
-            }}
+            className="pointer-events-none absolute top-[14px] bottom-[14px] right-[6px] w-[5px] rounded-r-sm paper-stack-right"
           />
 
           {/* Woven burgundy bookmark ribbon */}
@@ -831,7 +826,7 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
           {/* STAGE CONTAINER */}
           <div
             ref={spreadRef}
-            className={`relative bg-[#efe8da] rounded-[3px] shadow-inner ${
+            className={`relative bg-[#efe8da] dark:bg-[#191614] rounded-[3px] shadow-inner ${
               isMobile ? 'overflow-hidden' : ''
             }`}
             style={{
@@ -986,7 +981,7 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
               <div
                 ref={rightShadowRef}
                 aria-hidden="true"
-                className="pointer-events-none absolute top-0 right-0 z-20 bg-[#1a130d]"
+                className="pointer-events-none absolute top-0 right-0 z-20 bg-[#1a130d] dark:bg-black"
                 style={{
                   width: `${pageW}px`,
                   height: `${pageH}px`,
@@ -1085,8 +1080,9 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                 style={{
                   left: `${pageW - 2}px`,
                   width: '4px',
-                  background:
-                    'linear-gradient(to right, rgba(35,24,14,0.12), rgba(35,24,14,0.32), rgba(35,24,14,0.12))',
+                  background: isDark
+                    ? 'linear-gradient(to right, rgba(0,0,0,0.28), rgba(0,0,0,0.65), rgba(0,0,0,0.28))'
+                    : 'linear-gradient(to right, rgba(35,24,14,0.12), rgba(35,24,14,0.32), rgba(35,24,14,0.12))',
                 }}
               />
             ) : null}
@@ -1187,13 +1183,21 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                       bottom: 0,
                       left: '50%',
                       width: `${Math.round(38 + curl.intensity * 32)}px`,
-                      background: `linear-gradient(to right, rgba(45, 32, 18, ${(
-                        0.14 * curl.intensity
-                      ).toFixed(3)}) 0%, rgba(255, 252, 244, ${(
-                        0.56 * curl.intensity
-                      ).toFixed(3)}) 28%, rgba(255, 250, 240, ${(
-                        0.16 * curl.intensity
-                      ).toFixed(3)}) 62%, transparent 100%)`,
+                      background: isDark
+                        ? `linear-gradient(to right, rgba(5, 4, 3, ${(
+                            0.36 * curl.intensity
+                          ).toFixed(3)}) 0%, rgba(235, 222, 202, ${(
+                            0.16 * curl.intensity
+                          ).toFixed(3)}) 28%, rgba(235, 222, 202, ${(
+                            0.05 * curl.intensity
+                          ).toFixed(3)}) 62%, transparent 100%)`
+                        : `linear-gradient(to right, rgba(45, 32, 18, ${(
+                            0.14 * curl.intensity
+                          ).toFixed(3)}) 0%, rgba(255, 252, 244, ${(
+                            0.56 * curl.intensity
+                          ).toFixed(3)}) 28%, rgba(255, 250, 240, ${(
+                            0.16 * curl.intensity
+                          ).toFixed(3)}) 62%, transparent 100%)`,
                     }}
                   />
                 </div>
@@ -1304,7 +1308,7 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
             disabled={bookPhase !== 'closed'}
             onClick={bookPhase === 'closed' ? onOpenBook : undefined}
             aria-label="Open journal"
-            className={`group absolute inset-0 cover-cloth rounded-l-[4px] rounded-r-xl overflow-hidden flex flex-col justify-between ${
+            className={`group absolute inset-0 cover-cloth book-cover-shadow rounded-l-[4px] rounded-r-xl overflow-hidden flex flex-col justify-between ${
               isMobile ? 'p-8' : 'p-11'
             } text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c6b48] ${
               bookPhase === 'closed' ? 'cursor-pointer' : 'pointer-events-none'
@@ -1312,8 +1316,6 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
             style={{
               backfaceVisibility: 'hidden',
               transform: 'rotateY(0deg) translateZ(1px)',
-              boxShadow:
-                '0 22px 48px rgba(34, 26, 18, 0.34), 0 8px 18px rgba(34, 26, 18, 0.22), inset 0 1px 1px rgba(255, 240, 220, 0.14), inset -2px -2px 6px rgba(0, 0, 0, 0.35)',
             }}
           >
             {/* Spine hinge groove */}
@@ -1397,18 +1399,12 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                 transform: 'rotateY(180deg) translateZ(1px)',
               }}
             >
-              <div
-                className="w-full h-full rounded-r-[3px]"
-                style={{
-                  background:
-                    'linear-gradient(135deg, #f3ecde 0%, #ebe2cf 100%)',
-                }}
-              />
+              <div className="w-full h-full rounded-r-[3px] mobile-back-paper" />
             </div>
           ) : (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-0 cover-cloth rounded-l-xl rounded-r-none"
+              className="pointer-events-none absolute inset-0 cover-cloth book-frame-shadow rounded-l-xl rounded-r-none"
               style={{
                 backfaceVisibility: 'hidden',
                 transform: 'rotateY(180deg) translateZ(1px)',
@@ -1416,17 +1412,9 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                 paddingBottom: '11px',
                 paddingLeft: '11px',
                 paddingRight: '0px',
-                boxShadow:
-                  '0 22px 48px rgba(34, 26, 18, 0.34), 0 8px 18px rgba(34, 26, 18, 0.22), inset 0 1px 1px rgba(255, 240, 220, 0.14)',
               }}
             >
-              <div
-                className="pointer-events-none absolute top-[14px] bottom-[14px] left-[6px] w-[5px] rounded-l-sm"
-                style={{
-                  background:
-                    'repeating-linear-gradient(to right, #cfc3ae 0px, #ece3d2 1px, #cbbda4 2px)',
-                }}
-              />
+              <div className="pointer-events-none absolute top-[14px] bottom-[14px] left-[6px] w-[5px] rounded-l-sm paper-stack-left" />
               <div
                 className="relative overflow-hidden rounded-l-[3px]"
                 style={{ width: `${pageW}px`, height: `${pageH}px` }}
@@ -1457,8 +1445,9 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-y-0 right-0 w-[2px] z-20"
                   style={{
-                    background:
-                      'linear-gradient(to right, rgba(35,24,14,0.12), rgba(35,24,14,0.32))',
+                    background: isDark
+                      ? 'linear-gradient(to right, rgba(0,0,0,0.26), rgba(0,0,0,0.6))'
+                      : 'linear-gradient(to right, rgba(35,24,14,0.12), rgba(35,24,14,0.32))',
                   }}
                 />
               </div>

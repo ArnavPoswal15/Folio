@@ -154,20 +154,20 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label="Journal entries index"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/75 backdrop-blur-[2px] p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl max-h-[85vh] paper-grain rounded-lg border border-[#bcae97] shadow-2xl flex flex-col overflow-hidden"
+        className="w-full max-w-xl max-h-[85vh] paper-grain rounded-lg border border-[#bcae97] dark:border-[#3d362e] shadow-2xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 sm:px-7 py-5 border-b border-[#8c7960]/25 flex flex-wrap items-center justify-between gap-3">
+        <div className="px-6 sm:px-7 py-5 border-b border-[#8c7960]/25 dark:border-[#423a32] flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-serif text-2xl font-semibold text-[#261f19]">
+            <h2 className="font-serif text-2xl font-semibold text-[#261f19] dark:text-[#ece3d4]">
               Journal Index
             </h2>
-            <p className="text-xs text-[#756452] mt-0.5 tabular-nums">
+            <p className="text-xs text-[#756452] dark:text-[#9f917f] mt-0.5 tabular-nums">
               {hasActiveFilters
                 ? `${filteredEntries.length} of ${spreads.length} ${spreads.length === 1 ? 'spread' : 'spreads'}`
                 : `${spreads.length} ${spreads.length === 1 ? 'spread' : 'spreads'}`}
@@ -181,7 +181,7 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
                   onClose();
                   onOpenExport();
                 }}
-                className="text-[#6d5d4b] hover:text-[#261f19] hover:underline cursor-pointer whitespace-nowrap shrink-0"
+                className="text-[#6d5d4b] dark:text-[#9f917f] hover:text-[#261f19] dark:hover:text-[#ece3d4] hover:underline cursor-pointer whitespace-nowrap shrink-0"
               >
                 Export CSV
               </button>
@@ -192,7 +192,7 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
                 onNewSpread();
                 onClose();
               }}
-              className="text-[#57361e] font-semibold hover:underline cursor-pointer whitespace-nowrap shrink-0"
+              className="text-[#57361e] dark:text-[#deb488] font-semibold hover:underline cursor-pointer whitespace-nowrap shrink-0"
             >
               + New Page
             </button>
@@ -200,7 +200,7 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
               type="button"
               onClick={onClose}
               aria-label="Close index"
-              className="text-[#6d5d4b] hover:text-[#261f19] cursor-pointer px-2 py-1 min-w-[36px] min-h-[36px] flex items-center justify-center"
+              className="text-[#6d5d4b] dark:text-[#9f917f] hover:text-[#261f19] dark:hover:text-[#ece3d4] cursor-pointer px-2 py-1 min-w-[36px] min-h-[36px] flex items-center justify-center"
             >
               ✕
             </button>
@@ -208,21 +208,21 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
         </div>
 
         {/* Date Sorting & Filtering Bar */}
-        <div className="px-6 sm:px-7 py-3.5 border-b border-[#8c7960]/20 bg-[#f3ecdf]/70 space-y-3">
+        <div className="px-6 sm:px-7 py-3.5 border-b border-[#8c7960]/20 dark:border-[#3d362e] bg-[#f3ecdf]/70 dark:bg-[#171512]/80 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2.5">
             {/* Sort order segmented toggle */}
             <div
               role="group"
               aria-label="Sort entries by date"
-              className="inline-flex items-center p-0.5 rounded bg-[#e8dfd0] border border-[#8c7960]/25"
+              className="inline-flex items-center p-0.5 rounded bg-[#e8dfd0] dark:bg-[#25211d] border border-[#8c7960]/25 dark:border-[#423a32]"
             >
               <button
                 type="button"
                 onClick={() => setSortOrder('desc')}
                 className={`px-3 py-1 text-xs rounded-sm transition-colors cursor-pointer whitespace-nowrap shrink-0 min-h-[32px] ${
                   sortOrder === 'desc'
-                    ? 'bg-[#3a231c] text-[#f6f1e6] font-medium'
-                    : 'text-[#5e4f40] hover:text-[#261f19]'
+                    ? 'bg-[#3a231c] dark:bg-[#d7c4a5] text-[#f6f1e6] dark:text-[#1b1511] font-medium'
+                    : 'text-[#5e4f40] dark:text-[#b4a592] hover:text-[#261f19] dark:hover:text-[#ece3d4]'
                 }`}
               >
                 Newest first
@@ -232,8 +232,8 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
                 onClick={() => setSortOrder('asc')}
                 className={`px-3 py-1 text-xs rounded-sm transition-colors cursor-pointer whitespace-nowrap shrink-0 min-h-[32px] ${
                   sortOrder === 'asc'
-                    ? 'bg-[#3a231c] text-[#f6f1e6] font-medium'
-                    : 'text-[#5e4f40] hover:text-[#261f19]'
+                    ? 'bg-[#3a231c] dark:bg-[#d7c4a5] text-[#f6f1e6] dark:text-[#1b1511] font-medium'
+                    : 'text-[#5e4f40] dark:text-[#b4a592] hover:text-[#261f19] dark:hover:text-[#ece3d4]'
                 }`}
               >
                 Oldest first
@@ -249,7 +249,7 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
                 id="index-month-filter"
                 value={monthFilter}
                 onChange={(e) => handleSelectMonth(e.target.value)}
-                className="px-2.5 py-1.5 text-xs rounded bg-[#faf6ed] text-[#261f19] border border-[#8c7960]/30 focus:outline-none focus:border-[#57361e] cursor-pointer min-h-[34px]"
+                className="px-2.5 py-1.5 text-xs rounded bg-[#faf6ed] dark:bg-[#25211d] text-[#261f19] dark:text-[#ece3d4] border border-[#8c7960]/30 dark:border-[#4a4138] focus:outline-none focus:border-[#57361e] dark:focus:border-[#deb488] cursor-pointer min-h-[34px]"
               >
                 <option value="all">All months</option>
                 {availableMonths.map((ym) => (
@@ -263,7 +263,7 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
                 <button
                   type="button"
                   onClick={resetFilters}
-                  className="text-xs text-[#6d5d4b] hover:text-[#261f19] underline cursor-pointer whitespace-nowrap shrink-0 px-1.5 py-1"
+                  className="text-xs text-[#6d5d4b] dark:text-[#9f917f] hover:text-[#261f19] dark:hover:text-[#ece3d4] underline cursor-pointer whitespace-nowrap shrink-0 px-1.5 py-1"
                 >
                   Clear
                 </button>
@@ -290,8 +290,8 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
                   onClick={() => handleSelectRange(opt.id)}
                   className={`px-2.5 py-1 text-xs rounded border transition-colors cursor-pointer whitespace-nowrap shrink-0 min-h-[32px] ${
                     active
-                      ? 'bg-[#3a231c] text-[#f6f1e6] border-[#3a231c] font-medium'
-                      : 'bg-[#faf6ed] text-[#5e4f40] border-[#8c7960]/25 hover:border-[#57361e]/60 hover:text-[#261f19]'
+                      ? 'bg-[#3a231c] dark:bg-[#d7c4a5] text-[#f6f1e6] dark:text-[#1b1511] border-[#3a231c] dark:border-[#d7c4a5] font-medium'
+                      : 'bg-[#faf6ed] dark:bg-[#25211d] text-[#5e4f40] dark:text-[#b4a592] border-[#8c7960]/25 dark:border-[#423a32] hover:border-[#57361e]/60 dark:hover:border-[#deb488]/60 hover:text-[#261f19] dark:hover:text-[#ece3d4]'
                   }`}
                 >
                   {opt.label}
@@ -301,14 +301,14 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
           </div>
 
           {rangePreset === 'custom' ? (
-            <div className="pt-1 flex flex-wrap items-center gap-3 text-xs text-[#5e4f40]">
+            <div className="pt-1 flex flex-wrap items-center gap-3 text-xs text-[#5e4f40] dark:text-[#b4a592]">
               <label className="flex items-center gap-1.5">
                 <span>From</span>
                 <input
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="px-2 py-1 rounded bg-[#faf6ed] text-[#261f19] border border-[#8c7960]/30 focus:outline-none focus:border-[#57361e] min-h-[34px]"
+                  className="px-2 py-1 rounded bg-[#faf6ed] dark:bg-[#25211d] text-[#261f19] dark:text-[#ece3d4] border border-[#8c7960]/30 dark:border-[#4a4138] focus:outline-none focus:border-[#57361e] dark:focus:border-[#deb488] min-h-[34px]"
                 />
               </label>
               <label className="flex items-center gap-1.5">
@@ -317,7 +317,7 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="px-2 py-1 rounded bg-[#faf6ed] text-[#261f19] border border-[#8c7960]/30 focus:outline-none focus:border-[#57361e] min-h-[34px]"
+                  className="px-2 py-1 rounded bg-[#faf6ed] dark:bg-[#25211d] text-[#261f19] dark:text-[#ece3d4] border border-[#8c7960]/30 dark:border-[#4a4138] focus:outline-none focus:border-[#57361e] dark:focus:border-[#deb488] min-h-[34px]"
                 />
               </label>
             </div>
@@ -325,16 +325,16 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
         </div>
 
         {/* Entries List */}
-        <div className="flex-1 overflow-y-auto divide-y divide-[#8c7960]/15 px-6 sm:px-7 py-2 journal-scroll">
+        <div className="flex-1 overflow-y-auto divide-y divide-[#8c7960]/15 dark:divide-[#38312a] px-6 sm:px-7 py-2 journal-scroll">
           {filteredEntries.length === 0 ? (
             <div className="py-12 text-center space-y-3">
-              <p className="font-serif text-lg text-[#4f4235]">
+              <p className="font-serif text-lg text-[#4f4235] dark:text-[#c4b6a3]">
                 No journal entries match this date selection.
               </p>
               <button
                 type="button"
                 onClick={resetFilters}
-                className="px-4 py-2 text-xs font-medium rounded bg-[#3a231c] text-[#f6f1e6] hover:bg-[#4c2e25] transition-colors cursor-pointer"
+                className="px-4 py-2 text-xs font-medium rounded bg-[#3a231c] dark:bg-[#d7c4a5] text-[#f6f1e6] dark:text-[#1b1511] hover:bg-[#4c2e25] dark:hover:bg-[#e5d5ba] transition-colors cursor-pointer"
               >
                 Reset date filters
               </button>
@@ -361,30 +361,30 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
                     className="flex-1 text-left cursor-pointer focus-visible:outline-none"
                   >
                     <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-                      <span className="text-xs tabular-nums text-[#8a7966]">
+                      <span className="text-xs tabular-nums text-[#8a7966] dark:text-[#8f8170]">
                         {String(originalIndex + 1).padStart(2, '0')}
                       </span>
                       <span
                         className={`font-serif text-lg font-medium ${
                           active
-                            ? 'text-[#57361e] underline underline-offset-4'
-                            : 'text-[#261f19] group-hover:text-[#57361e]'
+                            ? 'text-[#57361e] dark:text-[#deb488] underline underline-offset-4'
+                            : 'text-[#261f19] dark:text-[#ece3d4] group-hover:text-[#57361e] dark:group-hover:text-[#deb488]'
                         }`}
                       >
                         {d.full}
                       </span>
                       {active ? (
-                        <span className="text-xs italic text-[#7a6855]">
+                        <span className="text-xs italic text-[#7a6855] dark:text-[#9f917f]">
                           · Open
                         </span>
                       ) : null}
                     </div>
                     {spread.contextNote ? (
-                      <div className="mt-0.5 pl-6 text-xs text-[#7a6855] truncate">
+                      <div className="mt-0.5 pl-6 text-xs text-[#7a6855] dark:text-[#9f917f] truncate">
                         {spread.contextNote}
                       </div>
                     ) : null}
-                    <p className="mt-1 pl-6 font-hand text-lg text-[#5e4f40] line-clamp-1">
+                    <p className="mt-1 pl-6 font-hand ink-prose text-lg text-[#5e4f40] dark:text-[#bfb19e] line-clamp-1">
                       {snippet || 'Blank sheet'}
                     </p>
                   </button>
@@ -394,7 +394,7 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
                       type="button"
                       onClick={() => onDeleteSpread(originalIndex)}
                       aria-label={`Delete entry for ${d.full}`}
-                      className="text-xs text-[#9c8b78] hover:text-[#8c2d2d] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer py-1 px-2 shrink-0"
+                      className="text-xs text-[#9c8b78] dark:text-[#8f8170] hover:text-[#8c2d2d] dark:hover:text-[#f0a8a3] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer py-1 px-2 shrink-0"
                     >
                       Remove
                     </button>
@@ -406,7 +406,7 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
         </div>
 
         {/* Footer Sync Line */}
-        <div className="px-6 sm:px-7 py-3 border-t border-[#8c7960]/20 flex items-center justify-between gap-3 text-xs text-[#756452]">
+        <div className="px-6 sm:px-7 py-3 border-t border-[#8c7960]/20 dark:border-[#423a32] flex items-center justify-between gap-3 text-xs text-[#756452] dark:text-[#9f917f]">
           <span className="truncate">{syncSummary}</span>
           {onOpenAccount ? (
             <button
@@ -415,7 +415,7 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
                 onClose();
                 onOpenAccount();
               }}
-              className="text-[#57361e] hover:underline cursor-pointer whitespace-nowrap shrink-0"
+              className="text-[#57361e] dark:text-[#deb488] hover:underline cursor-pointer whitespace-nowrap shrink-0"
             >
               {userEmail ? 'Account settings' : 'Sign in to sync'}
             </button>

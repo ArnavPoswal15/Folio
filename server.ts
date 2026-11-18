@@ -13,6 +13,17 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const SERVER_START_MS = Date.now();
+const APP_VERSION = (() => {
+  try {
+    const raw = fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { version?: unknown };
+    return typeof parsed.version === 'string' && parsed.version.trim()
+      ? parsed.version.trim()
+      : '1.1.0';
+  } catch {
+    return '1.1.0';
+  }
+})();
 
 function parsePositiveInt(raw: string | undefined, fallback: number): number {
   if (!raw) return fallback;
@@ -113,7 +124,9 @@ async function getFirebasePublicCerts(
     return certCache.certs;
   }
 
-  const res = await fetch(FIREBASE_CERTS_URL);
+  const res = await fetch(FIREBASE_CERTS_URL, {
+    signal: AbortSignal.timeout(8_000),
+  });
   if (!res.ok) {
     throw new Error(`Failed to fetch Firebase public certificates (${res.status}).`);
   }
@@ -724,7 +737,14 @@ async function transcribeWithGroq(
 
 async function startServer() {
   const app = express();
+  app.disable('x-powered-by');
   app.set('trust proxy', 1);
+
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    next();
+  });
 
   const transcribeJsonParser = express.json({ limit: '9mb' });
   app.use((req, res, next) => {
@@ -741,6 +761,7 @@ async function startServer() {
     res.json({
       status: 'ok',
       service: 'folio',
+      version: APP_VERSION,
       uptimeSec: Math.floor((Date.now() - SERVER_START_MS) / 1000),
       authRequired: REQUIRE_TRANSCRIBE_AUTH,
       transcriptionConfigured: hasGroq || hasGemini,

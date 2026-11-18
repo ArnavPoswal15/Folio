@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-serif: "Cormorant Garamond", Georgia, serif;
@@ -6,6 +7,14 @@
 }
 
 @layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
   html,
   body,
   #root {
@@ -19,6 +28,13 @@
     -moz-osx-font-smoothing: grayscale;
     overflow: hidden;
     user-select: none;
+  }
+
+  html.dark,
+  html.dark body,
+  html.dark #root {
+    background-color: #121110;
+    color: #ece3d4;
   }
 }
 
@@ -43,12 +59,41 @@
     );
 }
 
-/* Archival ivory cotton paper */
+.dark .desk-surface {
+  background-color: #121110;
+  background-image:
+    radial-gradient(ellipse 85% 75% at 50% 44%, rgba(52, 43, 35, 0.48) 0%, rgba(20, 18, 16, 0.65) 68%, rgba(8, 7, 6, 0.92) 100%),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 244, 226, 0.016) 0px,
+      rgba(255, 244, 226, 0.016) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 244, 226, 0.012) 0px,
+      rgba(255, 244, 226, 0.012) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+}
+
+/* Archival ivory cotton paper / charcoal cotton paper in dark mode */
 .paper-grain {
   background-color: #faf6ed;
   background-image:
     radial-gradient(rgba(110, 88, 62, 0.028) 1px, transparent 0),
     radial-gradient(rgba(90, 70, 48, 0.02) 1px, transparent 0);
+  background-size: 24px 24px, 17px 17px;
+  background-position: 0 0, 9px 11px;
+}
+
+.dark .paper-grain {
+  background-color: #1d1a17;
+  background-image:
+    radial-gradient(rgba(255, 244, 226, 0.024) 1px, transparent 0),
+    radial-gradient(rgba(0, 0, 0, 0.16) 1px, transparent 0);
   background-size: 24px 24px, 17px 17px;
   background-position: 0 0, 9px 11px;
 }
@@ -65,11 +110,25 @@
   background-position: 0 2px;
 }
 
+.dark .paper-ruled {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 31px,
+    rgba(216, 200, 178, 0.115) 31px,
+    rgba(216, 200, 178, 0.115) 32px
+  );
+}
+
 /* Dotted grid aligned to 24px spacing */
 .paper-dotted {
   background-image: radial-gradient(rgba(120, 100, 78, 0.25) 1px, transparent 1px);
   background-size: 24px 24px;
   background-position: 6px 10px;
+}
+
+.dark .paper-dotted {
+  background-image: radial-gradient(rgba(216, 200, 178, 0.19) 1px, transparent 1px);
 }
 
 /* Woven deep espresso-umber bookcloth */
@@ -93,9 +152,144 @@
     );
 }
 
-/* Fountain-pen ink crispness */
+.dark .cover-cloth {
+  background-color: #191412;
+  background-image:
+    linear-gradient(145deg, rgba(255, 238, 214, 0.03) 0%, rgba(0, 0, 0, 0.42) 100%),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 240, 220, 0.02) 0px,
+      rgba(255, 240, 220, 0.02) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.14) 0px,
+      rgba(0, 0, 0, 0.14) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+}
+
+/* Tactile paper edges, spine gutters, and book shadows */
+.book-frame-shadow {
+  box-shadow:
+    0 22px 48px rgba(34, 26, 18, 0.34),
+    0 8px 18px rgba(34, 26, 18, 0.22),
+    inset 0 1px 1px rgba(255, 240, 220, 0.14);
+}
+
+.dark .book-frame-shadow {
+  box-shadow:
+    0 26px 56px rgba(0, 0, 0, 0.68),
+    0 10px 22px rgba(0, 0, 0, 0.48),
+    inset 0 1px 1px rgba(255, 238, 214, 0.09);
+}
+
+.book-cover-shadow {
+  box-shadow:
+    0 22px 48px rgba(34, 26, 18, 0.34),
+    0 8px 18px rgba(34, 26, 18, 0.22),
+    inset 0 1px 1px rgba(255, 240, 220, 0.14),
+    inset -2px -2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.dark .book-cover-shadow {
+  box-shadow:
+    0 26px 56px rgba(0, 0, 0, 0.7),
+    0 10px 22px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 238, 214, 0.1),
+    inset -2px -2px 6px rgba(0, 0, 0, 0.55);
+}
+
+.paper-stack-left {
+  background: repeating-linear-gradient(to right, #cfc3ae 0px, #ece3d2 1px, #cbbda4 2px);
+}
+
+.dark .paper-stack-left {
+  background: repeating-linear-gradient(to right, #2a2622 0px, #3b352f 1px, #24201d 2px);
+}
+
+.paper-stack-right {
+  background: repeating-linear-gradient(to right, #cbbda4 0px, #ece3d2 1px, #cfc3ae 2px);
+}
+
+.dark .paper-stack-right {
+  background: repeating-linear-gradient(to right, #24201d 0px, #3b352f 1px, #2a2622 2px);
+}
+
+.mobile-back-paper {
+  background: linear-gradient(135deg, #f3ecde 0%, #ebe2cf 100%);
+}
+
+.dark .mobile-back-paper {
+  background: linear-gradient(135deg, #211d1a 0%, #191613 100%);
+}
+
+.paper-edge-left {
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.55);
+}
+
+.dark .paper-edge-left {
+  box-shadow: inset 1px 0 0 rgba(255, 244, 226, 0.06);
+}
+
+.paper-edge-right {
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.55);
+}
+
+.dark .paper-edge-right {
+  box-shadow: inset -1px 0 0 rgba(255, 244, 226, 0.06);
+}
+
+.spine-gutter-mobile {
+  background: linear-gradient(to right, rgba(38, 27, 16, 0.14) 0%, transparent 100%);
+}
+
+.dark .spine-gutter-mobile {
+  background: linear-gradient(to right, rgba(5, 4, 3, 0.42) 0%, transparent 100%);
+}
+
+.spine-gutter-left {
+  background: linear-gradient(to left, rgba(38, 27, 16, 0.17) 0%, rgba(38, 27, 16, 0.06) 42%, transparent 100%);
+}
+
+.dark .spine-gutter-left {
+  background: linear-gradient(to left, rgba(5, 4, 3, 0.46) 0%, rgba(5, 4, 3, 0.18) 42%, transparent 100%);
+}
+
+.spine-gutter-right {
+  background: linear-gradient(to right, rgba(38, 27, 16, 0.16) 0%, rgba(38, 27, 16, 0.05) 42%, transparent 100%);
+}
+
+.dark .spine-gutter-right {
+  background: linear-gradient(to right, rgba(5, 4, 3, 0.44) 0%, rgba(5, 4, 3, 0.16) 42%, transparent 100%);
+}
+
+.corner-sheen-right {
+  background: linear-gradient(135deg, transparent 50%, rgba(155, 134, 108, 0.22) 52%, rgba(255, 252, 245, 0.55) 100%);
+}
+
+.dark .corner-sheen-right {
+  background: linear-gradient(135deg, transparent 50%, rgba(12, 10, 8, 0.42) 52%, rgba(235, 222, 202, 0.16) 100%);
+}
+
+.corner-sheen-left {
+  background: linear-gradient(225deg, transparent 50%, rgba(155, 134, 108, 0.22) 52%, rgba(255, 252, 245, 0.55) 100%);
+}
+
+.dark .corner-sheen-left {
+  background: linear-gradient(225deg, transparent 50%, rgba(12, 10, 8, 0.42) 52%, rgba(235, 222, 202, 0.16) 100%);
+}
+
+/* Fountain-pen ink crispness + dark-mode optical compensation */
 .ink-prose {
   font-kerning: normal;
+}
+
+.dark .ink-prose {
+  letter-spacing: 0.01em;
 }
 
 /* Quiet custom scrollbar inside handwritten textareas */
@@ -108,6 +302,10 @@
 .journal-scroll::-webkit-scrollbar-thumb {
   background: rgba(120, 100, 78, 0.22);
   border-radius: 2px;
+}
+
+.dark .journal-scroll::-webkit-scrollbar-thumb {
+  background: rgba(216, 200, 178, 0.22);
 }
 
 @media (prefers-reduced-motion: reduce) {

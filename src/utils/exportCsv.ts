@@ -1,5 +1,5 @@
 import { formatJournalDateParts } from '../data/initialEntries';
-import { INK_COLORS, JournalSpread } from '../types/journal';
+import { formatLocalIsoDate, INK_COLORS, JournalSpread } from '../types/journal';
 
 export type ExportDurationId = '1w' | '2w' | '1m' | '3m' | '6m' | '12m' | 'all';
 
@@ -79,14 +79,17 @@ export function filterSpreadsByDuration(
 
 function escapeCsvCell(value: string): string {
   const normalized = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const formulaSafe = /^[=+\-@\t]/.test(normalized)
+    ? `'${normalized}`
+    : normalized;
   if (
-    normalized.includes(',') ||
-    normalized.includes('"') ||
-    normalized.includes('\n')
+    formulaSafe.includes(',') ||
+    formulaSafe.includes('"') ||
+    formulaSafe.includes('\n')
   ) {
-    return `"${normalized.replace(/"/g, '""')}"`;
+    return `"${formulaSafe.replace(/"/g, '""')}"`;
   }
-  return normalized;
+  return formulaSafe;
 }
 
 export function buildJournalCsv(spreads: JournalSpread[]): string {
@@ -136,7 +139,7 @@ export function downloadJournalCsv(
   const url = URL.createObjectURL(blob);
 
   const opt = EXPORT_DURATION_OPTIONS.find((o) => o.id === duration);
-  const stamp = new Date().toISOString().slice(0, 10);
+  const stamp = formatLocalIsoDate();
   const filename = `folio-journal-${opt?.shortLabel ?? 'export'}-${stamp}.csv`;
 
   const link = document.createElement('a');
