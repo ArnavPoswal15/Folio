@@ -4,7 +4,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useBookCoverAnimation } from '../../hooks/useBookCoverAnimation';
 import { usePageCurl } from '../../hooks/usePageCurl';
 import { PageCurlStageProps } from '../../types/book';
-import { formatJournalDateParts, formatLocalIsoDate } from '../../utils/date';
+import { formatJournalDateParts } from '../../utils/date';
 import { resolveCurlStageDescriptors } from '../../utils/pageCurlGeometry';
 import { CurlFlapOverlay } from '../pageCurl/CurlFlapOverlay';
 import { CurlInteractionZones } from '../pageCurl/CurlInteractionZones';
@@ -126,7 +126,7 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
     curlMode === 'dragging' ||
     curlMode === 'animating';
 
-  const coverDateParts = formatJournalDateParts(formatLocalIsoDate());
+  const coverDateParts = formatJournalDateParts(currentSpread.date);
   const { isCurrentContinuation, nextReveal, prevReveal, flapBack } =
     resolveCurlStageDescriptors({
       spreads,
