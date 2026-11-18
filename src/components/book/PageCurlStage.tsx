@@ -4,7 +4,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useBookCoverAnimation } from '../../hooks/useBookCoverAnimation';
 import { usePageCurl } from '../../hooks/usePageCurl';
 import { PageCurlStageProps } from '../../types/book';
-import { formatJournalDateParts } from '../../utils/date';
+import { formatJournalDateParts, formatLocalIsoDate } from '../../utils/date';
 import { resolveCurlStageDescriptors } from '../../utils/pageCurlGeometry';
 import { CurlFlapOverlay } from '../pageCurl/CurlFlapOverlay';
 import { CurlInteractionZones } from '../pageCurl/CurlInteractionZones';
@@ -126,7 +126,7 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
     curlMode === 'dragging' ||
     curlMode === 'animating';
 
-  const dateParts = formatJournalDateParts(currentSpread.date);
+  const coverDateParts = formatJournalDateParts(formatLocalIsoDate());
   const { isCurrentContinuation, nextReveal, prevReveal, flapBack } =
     resolveCurlStageDescriptors({
       spreads,
@@ -159,7 +159,7 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
           pageH={pageH}
           halfBookW={halfBookW}
           fullBookH={fullBookH}
-          dateParts={dateParts}
+          dateParts={coverDateParts}
           showWelcome={showWelcome}
           currentSpread={currentSpread}
           currentIndex={currentIndex}
@@ -214,7 +214,7 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
         onClearFocusRequest={onClearFocusRequest}
       />
 
-      {bookPhase !== 'open' ? (
+      {bookPhase !== 'open' && (
         <div
           ref={coverRefs.rightShadowRef}
           aria-hidden="true"
@@ -232,7 +232,7 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                 : 0,
           }}
         />
-      ) : null}
+      )}
 
       <CurlFlapOverlay
         curl={curl}

@@ -89,7 +89,7 @@ export const EntriesFilterBar: React.FC<EntriesFilterBarProps> = ({
           ))}
         </select>
 
-        {hasActiveFilters ? (
+        {hasActiveFilters && (
           <button
             type="button"
             onClick={onResetFilters}
@@ -97,7 +97,7 @@ export const EntriesFilterBar: React.FC<EntriesFilterBarProps> = ({
           >
             Clear
           </button>
-        ) : null}
+        )}
       </div>
     </div>
 
@@ -121,7 +121,7 @@ export const EntriesFilterBar: React.FC<EntriesFilterBarProps> = ({
       })}
     </div>
 
-    {rangePreset === 'custom' ? (
+    {rangePreset === 'custom' && (
       <div className="pt-1 flex flex-wrap items-center gap-3 text-xs text-[#5e4f40] dark:text-[#b4a592]">
         <label className="flex items-center gap-1.5">
           <span>From</span>
@@ -142,6 +142,6 @@ export const EntriesFilterBar: React.FC<EntriesFilterBarProps> = ({
           />
         </label>
       </div>
-    ) : null}
+    )}
   </div>
 );

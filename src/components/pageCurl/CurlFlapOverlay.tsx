@@ -82,7 +82,7 @@ export const CurlFlapOverlay: React.FC<CurlFlapOverlayProps> = ({
 
   return (
     <>
-      {isTurningNext && curl && nextReveal ? (
+      {isTurningNext && curl && nextReveal && (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute top-0 z-10 isolate overflow-hidden rounded-r-[3px]"
@@ -111,9 +111,9 @@ export const CurlFlapOverlay: React.FC<CurlFlapOverlayProps> = ({
             isDark={isDark}
           />
         </div>
-      ) : null}
+      )}
 
-      {isTurningPrev && curl && prevReveal ? (
+      {isTurningPrev && curl && prevReveal && (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute top-0 left-0 z-10 isolate overflow-hidden rounded-l-[3px]"
@@ -141,9 +141,9 @@ export const CurlFlapOverlay: React.FC<CurlFlapOverlayProps> = ({
             isDark={isDark}
           />
         </div>
-      ) : null}
+      )}
 
-      {!isMobile ? (
+      {!isMobile && (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-y-0 z-20"
@@ -155,9 +155,9 @@ export const CurlFlapOverlay: React.FC<CurlFlapOverlayProps> = ({
               : 'linear-gradient(to right, rgba(35,24,14,0.12), rgba(35,24,14,0.32), rgba(35,24,14,0.12))',
           }}
         />
-      ) : null}
+      )}
 
-      {curl && curl.isActive ? (
+      {curl && curl.isActive && (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 z-30 isolate"
@@ -178,7 +178,7 @@ export const CurlFlapOverlay: React.FC<CurlFlapOverlayProps> = ({
               boxShadow: '0 0 1px rgba(80, 62, 42, 0.35)',
             }}
           >
-            {flapBack ? (
+            {flapBack && (
               <JournalPageContent
                 spread={flapBack.spread}
                 side={flapBack.side}
@@ -190,7 +190,7 @@ export const CurlFlapOverlay: React.FC<CurlFlapOverlayProps> = ({
                 isSignedIn={isSignedIn}
                 interactive={false}
               />
-            ) : null}
+            )}
           </div>
 
           <div
@@ -229,7 +229,7 @@ export const CurlFlapOverlay: React.FC<CurlFlapOverlayProps> = ({
             />
           </div>
         </div>
-      ) : null}
+      )}
     </>
   );
 };

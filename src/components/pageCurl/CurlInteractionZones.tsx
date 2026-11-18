@@ -79,7 +79,7 @@ export const CurlInteractionZones: React.FC<CurlInteractionZonesProps> = ({
         }}
       />
 
-      {canTurnPrev ? (
+      {canTurnPrev && (
         <>
           <div
             role="button"
@@ -115,7 +115,7 @@ export const CurlInteractionZones: React.FC<CurlInteractionZonesProps> = ({
             }}
           />
         </>
-      ) : null}
+      )}
     </>
   );
 };

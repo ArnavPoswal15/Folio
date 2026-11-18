@@ -49,23 +49,23 @@ export const EntryListItem: React.FC<EntryListItemProps> = ({
           >
             {dateParts.full}
           </span>
-          {isActive ? (
+          {isActive && (
             <span className="text-xs italic text-[#7a6855] dark:text-[#9f917f]">
               · Open
             </span>
-          ) : null}
+          )}
         </div>
-        {spread.contextNote ? (
+        {spread.contextNote && (
           <div className="mt-0.5 pl-6 text-xs text-[#7a6855] dark:text-[#9f917f] truncate">
             {spread.contextNote}
           </div>
-        ) : null}
+        )}
         <p className="mt-1 pl-6 font-hand ink-prose text-lg text-[#5e4f40] dark:text-[#bfb19e] line-clamp-1">
           {snippet}
         </p>
       </button>
 
-      {canDelete ? (
+      {canDelete && (
         <button
           type="button"
           onClick={() => onDelete(originalIndex)}
@@ -74,7 +74,7 @@ export const EntryListItem: React.FC<EntryListItemProps> = ({
         >
           Remove
         </button>
-      ) : null}
+      )}
     </div>
   );
 };

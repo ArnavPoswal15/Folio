@@ -148,7 +148,7 @@ export const PageStyleFontBar: React.FC<PageStyleFontBarProps> = ({
           <ChevronDown className="w-3 h-3 opacity-75" />
         </button>
 
-        {interactive && fontMenuOpen ? (
+        {interactive && fontMenuOpen && (
           <div
             role="menu"
             aria-label="Journal font style"
@@ -179,14 +179,14 @@ export const PageStyleFontBar: React.FC<PageStyleFontBarProps> = ({
                   >
                     {opt.label}
                   </span>
-                  {active ? (
+                  {active && (
                     <Check className="w-3.5 h-3.5 text-[#57361e] dark:text-[#deb488] shrink-0" />
-                  ) : null}
+                  )}
                 </button>
               );
             })}
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );

@@ -96,7 +96,7 @@ export const InkHistoryActions: React.FC<InkHistoryActionsProps> = ({
         <span className="hidden md:inline">Touch</span>
       </button>
 
-      {hasInkOnActivePage ? (
+      {hasInkOnActivePage && (
         <button
           type="button"
           aria-label={`Clear ink on ${activeSideLabel}`}
@@ -116,9 +116,9 @@ export const InkHistoryActions: React.FC<InkHistoryActionsProps> = ({
           }`}
         >
           <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
-          {confirmClear ? <span>Clear?</span> : null}
+          {confirmClear && <span>Clear?</span>}
         </button>
-      ) : null}
+      )}
     </div>
   );
 };

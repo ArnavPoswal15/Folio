@@ -84,12 +84,12 @@ export const BookFrameChrome: React.FC<BookFrameChromeProps> = ({
             transformStyle: 'flat',
           }}
         >
-          {!isMobile ? (
+          {!isMobile && (
             <div
               aria-hidden="true"
               className="pointer-events-none absolute top-[14px] bottom-[14px] left-[6px] w-[5px] rounded-l-sm paper-stack-left"
             />
-          ) : null}
+          )}
           <div
             aria-hidden="true"
             className="pointer-events-none absolute top-[14px] bottom-[14px] right-[6px] w-[5px] rounded-r-sm paper-stack-right"

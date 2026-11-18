@@ -143,7 +143,7 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
             </div>
 
             <div className="pt-4 space-y-2.5">
-              {authError ? (
+              {authError && (
                 <div className="p-2.5 rounded border border-[#8c2d2d]/30 dark:border-[#b84a45]/45 bg-[#8c2d2d]/5 dark:bg-[#331a1a]/80 text-xs text-[#732323] dark:text-[#f0a8a3] flex items-center justify-between gap-2">
                   <span>{authError}</span>
                   <button
@@ -154,7 +154,7 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
                     Dismiss
                   </button>
                 </div>
-              ) : null}
+              )}
 
               <button
                 type="button"
@@ -226,7 +226,7 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
               devices, or explore as a guest first.
             </p>
 
-            {authError ? (
+            {authError && (
               <div className="mt-4 p-3 rounded border border-[#8c2d2d]/30 dark:border-[#b84a45]/45 bg-[#8c2d2d]/5 dark:bg-[#331a1a]/80 text-xs text-[#732323] dark:text-[#f0a8a3] flex items-center justify-between gap-2">
                 <span>{authError}</span>
                 <button
@@ -237,7 +237,7 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
                   Dismiss
                 </button>
               </div>
-            ) : null}
+            )}
 
             <div className="mt-6 space-y-3">
               <button
@@ -269,12 +269,12 @@ export const WelcomeSpreadContent: React.FC<WelcomeSpreadContentProps> = ({
         </>
       )}
 
-      {(interactive || isMobile) && side === 'right' ? (
+      {(interactive || isMobile) && side === 'right' && (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute bottom-0 right-0 z-10 w-5 h-5 opacity-45 corner-sheen-right"
         />
-      ) : null}
+      )}
     </div>
   );
 };

@@ -98,7 +98,7 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
             </p>
           </div>
           <div className="flex items-center gap-3 sm:gap-4 text-sm">
-            {onOpenExport ? (
+            {onOpenExport && (
               <button
                 type="button"
                 onClick={() => {
@@ -109,7 +109,7 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
               >
                 Export CSV
               </button>
-            ) : null}
+            )}
             <button
               type="button"
               onClick={() => {
@@ -181,7 +181,7 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
 
         <div className="px-6 sm:px-7 py-3 border-t border-[#8c7960]/20 dark:border-[#423a32] flex items-center justify-between gap-3 text-xs text-[#756452] dark:text-[#9f917f]">
           <span className="truncate">{syncSummary}</span>
-          {onOpenAccount ? (
+          {onOpenAccount && (
             <button
               type="button"
               onClick={() => {
@@ -192,7 +192,7 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
             >
               {userEmail ? 'Account settings' : 'Sign in to sync'}
             </button>
-          ) : null}
+          )}
         </div>
       </div>
     </div>

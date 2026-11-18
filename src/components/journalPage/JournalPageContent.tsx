@@ -228,9 +228,9 @@ export const JournalPageContent: React.FC<JournalPageContentProps> = ({
       />
 
       {(interactive || showCornerSheen) &&
-      ((side === 'right' && canTurnNext) ||
-        (side === 'left' && canTurnPrev) ||
-        (isMobile && canTurnNext)) ? (
+        ((side === 'right' && canTurnNext) ||
+          (side === 'left' && canTurnPrev) ||
+          (isMobile && canTurnNext)) && (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute bottom-0 right-0 z-10 w-5 h-5 opacity-45 corner-sheen-right"
@@ -238,16 +238,16 @@ export const JournalPageContent: React.FC<JournalPageContentProps> = ({
             display: isMobile || side === 'right' ? 'block' : 'none',
           }}
         />
-      ) : null}
+      )}
       {(interactive || showCornerSheen) &&
-      !isMobile &&
-      side === 'left' &&
-      canTurnPrev ? (
+        !isMobile &&
+        side === 'left' &&
+        canTurnPrev && (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute bottom-0 left-0 z-10 w-5 h-5 opacity-45 corner-sheen-left"
         />
-      ) : null}
+      )}
     </div>
   );
 };

@@ -142,11 +142,11 @@ export const ExportJournalModal: React.FC<ExportJournalModalProps> = ({
             )}
           </div>
 
-          {downloadedMessage ? (
+          {downloadedMessage && (
             <div className="text-xs font-medium text-[#2f5233] dark:text-[#8fd196]">
               {downloadedMessage}
             </div>
-          ) : null}
+          )}
         </div>
 
         <div className="px-6 sm:px-7 py-4 border-t border-[#8c7960]/20 dark:border-[#423a32] flex items-center justify-end gap-3">

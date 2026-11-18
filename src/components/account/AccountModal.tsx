@@ -122,7 +122,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                 </div>
               </div>
 
-              {syncError ? (
+              {syncError && (
                 <div className="p-3 rounded border border-[#8c2d2d]/30 dark:border-[#b84a45]/45 bg-[#8c2d2d]/5 dark:bg-[#331a1a]/80 text-xs text-[#732323] dark:text-[#f0a8a3] flex items-center justify-between gap-3">
                   <span>{syncError}</span>
                   <button
@@ -133,7 +133,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                     Retry
                   </button>
                 </div>
-              ) : null}
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -149,7 +149,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
             </div>
           )}
 
-          {authError ? (
+          {authError && (
             <div className="p-3 rounded border border-[#8c2d2d]/30 dark:border-[#b84a45]/45 bg-[#8c2d2d]/5 dark:bg-[#331a1a]/80 text-xs text-[#732323] dark:text-[#f0a8a3] flex items-center justify-between gap-3">
               <span>{authError}</span>
               <button
@@ -160,7 +160,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                 Dismiss
               </button>
             </div>
-          ) : null}
+          )}
         </div>
 
         <div className="px-6 sm:px-7 py-4 border-t border-[#8c7960]/20 dark:border-[#423a32] flex items-center justify-end gap-3">

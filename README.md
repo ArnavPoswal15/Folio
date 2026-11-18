@@ -1,6 +1,12 @@
+<div align="center">
+
+<img src="./docs/folio-sticker.png" alt="Folio sticker" width="280" />
+
 # Folio
 
 **A quiet place to put your thoughts.**
+
+</div>
 
 Folio is a digital journal designed to feel like opening a book. Write on customizable paper, turn pages with a natural curl, and keep your entries on your device or sync them across devices.
 

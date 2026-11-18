@@ -53,7 +53,8 @@ export const PageCompactHeader: React.FC<PageCompactHeaderProps> = ({
   onActionsMenuOpenChange,
 }) => {
   const drawToggle =
-    interactive && onToggleInkToolbar ? (
+    interactive &&
+    onToggleInkToolbar && (
       <button
         type="button"
         disabled={locked}
@@ -69,7 +70,7 @@ export const PageCompactHeader: React.FC<PageCompactHeaderProps> = ({
         <PenTool className="w-3 h-3 opacity-80" strokeWidth={1.7} />
         <span>Draw</span>
       </button>
-    ) : null;
+    );
 
   const actionsRow = (
     <PageActionsMenu
@@ -102,7 +103,7 @@ export const PageCompactHeader: React.FC<PageCompactHeaderProps> = ({
             </span>
             {actionsRow}
           </div>
-          {interactive ? (
+          {interactive && (
             <div className="mt-2 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 {drawToggle}
@@ -115,7 +116,7 @@ export const PageCompactHeader: React.FC<PageCompactHeaderProps> = ({
                 />
               </div>
             </div>
-          ) : null}
+          )}
         </>
       ) : side === 'left' ? (
         <div className="flex items-center justify-between gap-2 min-h-[30px]">

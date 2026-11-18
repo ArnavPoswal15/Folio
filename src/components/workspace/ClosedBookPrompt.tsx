@@ -70,7 +70,7 @@ export const ClosedBookPrompt: React.FC<ClosedBookPromptProps> = ({
       )}
     </div>
 
-    {visible && authError ? (
+    {visible && authError && (
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-md flex items-center gap-2 text-xs text-[#732323] dark:text-[#f0a8a3] bg-[#faf6ed]/95 dark:bg-[#2a1919]/95 border border-[#8c2d2d]/30 dark:border-[#b84a45]/45 rounded px-3.5 py-2 shadow-sm text-center">
         <span>{authError}</span>
         <button
@@ -81,6 +81,6 @@ export const ClosedBookPrompt: React.FC<ClosedBookPromptProps> = ({
           Dismiss
         </button>
       </div>
-    ) : null}
+    )}
   </>
 );

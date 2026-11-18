@@ -125,7 +125,7 @@ export const PageActionsMenu: React.FC<PageActionsMenuProps> = ({
         Close
       </button>
 
-      {interactive && menuOpen ? (
+      {interactive && menuOpen && (
         <div
           role="menu"
           aria-label="Journal actions"
@@ -206,14 +206,14 @@ export const PageActionsMenu: React.FC<PageActionsMenuProps> = ({
                 {isSignedIn ? 'Account & Sync' : 'Sign in'}
               </span>
             </span>
-            {!isSignedIn ? (
+            {!isSignedIn && (
               <span className="text-[11px] text-[#8a7966] dark:text-[#9f917f]">
                 Google
               </span>
-            ) : null}
+            )}
           </button>
         </div>
-      ) : null}
+      )}
     </div>
   );
 };

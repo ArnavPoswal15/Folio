@@ -172,7 +172,7 @@ export const PageVoiceErrorBanner: React.FC<PageVoiceErrorBannerProps> = ({
     <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] leading-snug text-[#732323] dark:text-[#f0a8a3] bg-[#faf2eb] dark:bg-[#331a1a]/80 border border-[#8c2d2d]/25 dark:border-[#b84a45]/45 rounded px-2 py-1">
       <span>{voiceControl.error}</span>
       <div className="flex items-center gap-2 shrink-0">
-        {!isSignedIn && onOpenAccount ? (
+        {!isSignedIn && onOpenAccount && (
           <button
             type="button"
             onClick={() => {
@@ -183,7 +183,7 @@ export const PageVoiceErrorBanner: React.FC<PageVoiceErrorBannerProps> = ({
           >
             Sign in
           </button>
-        ) : null}
+        )}
         <button
           type="button"
           onClick={voiceControl.onClearError}

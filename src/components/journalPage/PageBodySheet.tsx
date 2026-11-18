@@ -162,15 +162,17 @@ export const PageBodySheet: React.FC<PageBodySheetProps> = ({
               ...textMetricsStyle,
             }}
           >
-            {bodyText ? (
-              bodyText
-            ) : side === 'left' && showEmptyPlaceholders && !serializedInk ? (
-              <span className="text-[#ab9c88]/70 dark:text-[#6c6053]">
-                {isContinuation
-                  ? 'Continue writing...'
-                  : "Begin writing today's page..."}
-              </span>
-            ) : null}
+            {bodyText && bodyText}
+            {!bodyText &&
+              side === 'left' &&
+              showEmptyPlaceholders &&
+              !serializedInk && (
+                <span className="text-[#ab9c88]/70 dark:text-[#6c6053]">
+                  {isContinuation
+                    ? 'Continue writing...'
+                    : "Begin writing today's page..."}
+                </span>
+              )}
           </div>
         )}
       </InkCanvasLayer>

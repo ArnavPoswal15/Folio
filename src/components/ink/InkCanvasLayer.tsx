@@ -66,13 +66,13 @@ export const InkCanvasLayer: React.FC<InkCanvasLayerProps> = ({
         }`}
       />
 
-      {interactive ? (
+      {interactive && (
         <div
           ref={refs.eraserRingRef}
           aria-hidden="true"
           className="pointer-events-none absolute top-0 left-0 z-20 w-5 h-5 rounded-full border border-[#57361e]/80 dark:border-[#deb488]/85 bg-[#faf6ed]/35 dark:bg-[#1d1a17]/35 opacity-0 transition-opacity duration-75"
         />
-      ) : null}
+      )}
     </div>
   );
 };

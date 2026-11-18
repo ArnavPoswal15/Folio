@@ -32,7 +32,7 @@ export const PageFooterNav: React.FC<PageFooterNavProps> = ({
 
   return (
     <div className="relative z-10 pt-2 flex items-center justify-between text-xs text-[#8a7966] dark:text-[#8f8170]">
-      {showPrev ? (
+      {showPrev && (
         <button
           type="button"
           disabled={!interactive || locked}
@@ -41,13 +41,14 @@ export const PageFooterNav: React.FC<PageFooterNavProps> = ({
         >
           ← Previous
         </button>
-      ) : side === 'left' ? (
+      )}
+      {!showPrev && side === 'left' && (
         <span className="py-1 text-transparent select-none">←</span>
-      ) : null}
+      )}
 
       <span className="tabular-nums">{pageNumber}</span>
 
-      {showNext ? (
+      {showNext && (
         <button
           type="button"
           disabled={!interactive || locked}
@@ -56,7 +57,7 @@ export const PageFooterNav: React.FC<PageFooterNavProps> = ({
         >
           Next →
         </button>
-      ) : null}
+      )}
     </div>
   );
 };

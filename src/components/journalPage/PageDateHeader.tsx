@@ -70,7 +70,8 @@ export const PageDateHeader: React.FC<PageDateHeaderProps> = ({
   };
 
   const drawToggle =
-    interactive && onToggleInkToolbar ? (
+    interactive &&
+    onToggleInkToolbar && (
       <button
         type="button"
         disabled={locked}
@@ -86,7 +87,7 @@ export const PageDateHeader: React.FC<PageDateHeaderProps> = ({
         <PenTool className="w-3 h-3 opacity-80" strokeWidth={1.7} />
         <span>Draw</span>
       </button>
-    ) : null;
+    );
 
   return (
     <div
@@ -94,7 +95,7 @@ export const PageDateHeader: React.FC<PageDateHeaderProps> = ({
         actionsMenuOpen || fontMenuOpen ? 'z-30' : 'z-10'
       } pb-2.5 mb-2 border-b border-[#7c6952]/20 dark:border-[#423a32]`}
     >
-      {isMobile ? (
+      {isMobile && (
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 shrink-0">
             {drawToggle}
@@ -119,7 +120,7 @@ export const PageDateHeader: React.FC<PageDateHeaderProps> = ({
             onMenuOpenChange={onActionsMenuOpenChange}
           />
         </div>
-      ) : null}
+      )}
 
       <div className="flex items-start justify-between gap-2 min-h-[46px]">
         {interactive && editingDate ? (
@@ -150,16 +151,16 @@ export const PageDateHeader: React.FC<PageDateHeaderProps> = ({
             </div>
             <h1 className="font-serif text-[22px] sm:text-[26px] leading-tight font-semibold text-[#261f19] dark:text-[#ece3d4] tracking-tight group-hover:text-[#57361e] dark:group-hover:text-[#deb488] transition-colors">
               {dateInfo.monthDay}
-              {dateInfo.year ? (
+              {dateInfo.year && (
                 <span className="font-normal text-[#6f5f4d] dark:text-[#9f917f]">
                   , {dateInfo.year}
                 </span>
-              ) : null}
+              )}
             </h1>
           </button>
         )}
 
-        {!isMobile ? (
+        {!isMobile && (
           <div className="pt-0.5 shrink-0 flex items-center gap-2">
             {drawToggle}
             <PageVoiceControls
@@ -170,7 +171,7 @@ export const PageDateHeader: React.FC<PageDateHeaderProps> = ({
               voiceControl={voiceControl}
             />
           </div>
-        ) : null}
+        )}
       </div>
 
       <PageStyleFontBar
@@ -203,15 +204,16 @@ export const PageDateHeader: React.FC<PageDateHeaderProps> = ({
               fontSize: `${contextFontSize}px`,
             }}
           >
-            {spread.contextNote ? (
+            {spread.contextNote && (
               <span className="text-[#6a5948] dark:text-[#b7a896]">
                 {spread.contextNote}
               </span>
-            ) : showEmptyPlaceholders ? (
+            )}
+            {!spread.contextNote && showEmptyPlaceholders && (
               <span className="text-[#ab9b87]/80 dark:text-[#6f6356]">
                 Quiet note (weather, place, mood)...
               </span>
-            ) : null}
+            )}
           </div>
         )}
       </div>
