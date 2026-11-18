@@ -1,34 +1,17 @@
-/** Physical ribbon dimensions and coupled spring simulation constants. */
+/** Classic bookmark ribbon dimensions and damped spring constants (master PageCurlStage). */
 export const BOOKMARK_RIBBON_CONFIG = {
-  SAMPLES: 14,
-  BASE_SHAFT_LEN: 26,
-  BASE_HALF_W: 8,
-  MAX_STRETCH_MOBILE: 56,
-  MAX_STRETCH_DESKTOP: 76,
-  RUBBER_SCALE: 84,
-  UP_PUSH_LIMIT: -4,
-  UP_PUSH_RATIO: 0.2,
-  LATERAL_MAX_X: 44,
-  LATERAL_SCALE: 85,
+  /** Rubber-band length scale — larger = looser pull */
+  L: 68,
+  W: 16,
+  /** 8px tucked in binding + ~28px hanging below */
+  BASE_LENGTH: 36,
+  /** Spring stiffness */
+  K: 260,
+  /** Low damping ratio for lively bounce on release */
+  ZETA: 0.2,
   DRAG_MOVE_THRESHOLD_PX: 4,
-  FRESH_FLING_WINDOW_MS: 90,
-  DRAG_STRETCH_K: 420,
-  DRAG_STRETCH_C: 28,
-  DRAG_X_K: 300,
-  DRAG_X_C: 24,
-  DRAG_MID_K: 220,
-  DRAG_MID_C: 20,
-  DRAG_CURL_K: 180,
-  DRAG_CURL_C: 18,
-  FREE_STRETCH_K: 335,
-  FREE_STRETCH_C: 8.2,
-  FREE_TIP_K: 155,
-  FREE_TIP_C: 5.4,
-  FREE_MID_K: 240,
-  FREE_MID_C: 6.8,
-  FREE_CURL_K: 210,
-  FREE_CURL_C: 6.2,
-  SETTLE_POS_EPS: 0.04,
-  SETTLE_VEL_EPS: 0.2,
-  SETTLE_CURL_EPS: 0.01,
+  SWAY_MAX: 14,
+  SWAY_INPUT_SCALE: 65,
+  TAP_PULL: 22,
+  KEY_PULL: 26,
 } as const;

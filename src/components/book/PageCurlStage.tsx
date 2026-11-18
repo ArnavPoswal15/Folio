@@ -146,7 +146,6 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
       fullBookH={fullBookH}
       isMobile={isMobile}
       bookPhase={bookPhase}
-      ribbonPulseKey={`${bookPhase}-${currentIndex}-${mobileSide}`}
       bookWrapperRef={coverRefs.bookWrapperRef}
       deskShadowRef={coverRefs.deskShadowRef}
       frameRef={coverRefs.frameRef}

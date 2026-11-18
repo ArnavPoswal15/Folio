@@ -10,7 +10,6 @@ interface BookFrameChromeProps {
   fullBookH: number;
   isMobile: boolean;
   bookPhase: BookPhase;
-  ribbonPulseKey: string | number;
   bookWrapperRef: BookCoverRefs['bookWrapperRef'];
   deskShadowRef: BookCoverRefs['deskShadowRef'];
   frameRef: BookCoverRefs['frameRef'];
@@ -30,7 +29,6 @@ export const BookFrameChrome: React.FC<BookFrameChromeProps> = ({
   fullBookH,
   isMobile,
   bookPhase,
-  ribbonPulseKey,
   bookWrapperRef,
   deskShadowRef,
   frameRef,
@@ -97,7 +95,7 @@ export const BookFrameChrome: React.FC<BookFrameChromeProps> = ({
             className="pointer-events-none absolute top-[14px] bottom-[14px] right-[6px] w-[5px] rounded-r-sm paper-stack-right"
           />
 
-          <BookmarkRibbon isMobile={isMobile} motionPulseKey={ribbonPulseKey} />
+          <BookmarkRibbon isMobile={isMobile} />
 
           <div
             ref={spreadRef}
