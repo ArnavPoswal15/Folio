@@ -53,6 +53,8 @@ service cloud.firestore {
           'contextNote',
           'leftBody',
           'rightBody',
+          'leftInk',
+          'rightInk',
           'inkColor',
           'paperStyle',
           'clientUpdatedAt',
@@ -65,6 +67,8 @@ service cloud.firestore {
           'contextNote',
           'leftBody',
           'rightBody',
+          'leftInk',
+          'rightInk',
           'inkColor',
           'paperStyle',
           'clientUpdatedAt',
@@ -84,6 +88,10 @@ service cloud.firestore {
         && data.leftBody.size() <= 20000
         && data.rightBody is string
         && data.rightBody.size() <= 20000
+        && data.leftInk is string
+        && data.leftInk.size() <= 160000
+        && data.rightInk is string
+        && data.rightInk.size() <= 160000
         && data.inkColor in ['charcoal', 'midnight', 'sepia']
         && data.paperStyle in ['ruled', 'dotted', 'blank']
         && (data.clientUpdatedAt is int || data.clientUpdatedAt is float)
@@ -128,6 +136,8 @@ service cloud.firestore {
             'contextNote',
             'leftBody',
             'rightBody',
+            'leftInk',
+            'rightInk',
             'inkColor',
             'paperStyle',
             'clientUpdatedAt',

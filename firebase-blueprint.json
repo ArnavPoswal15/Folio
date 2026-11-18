@@ -77,6 +77,18 @@
           "minLength": 0,
           "maxLength": 20000
         },
+        "leftInk": {
+          "type": "string",
+          "description": "Compact serialized stylus ink strokes for the left page.",
+          "minLength": 0,
+          "maxLength": 160000
+        },
+        "rightInk": {
+          "type": "string",
+          "description": "Compact serialized stylus ink strokes for the right page.",
+          "minLength": 0,
+          "maxLength": 160000
+        },
         "inkColor": {
           "type": "string",
           "description": "Selected fountain-pen ink tone.",
@@ -104,6 +116,8 @@
         "contextNote",
         "leftBody",
         "rightBody",
+        "leftInk",
+        "rightInk",
         "inkColor",
         "paperStyle",
         "clientUpdatedAt",

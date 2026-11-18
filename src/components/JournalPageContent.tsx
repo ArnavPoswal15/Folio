@@ -1,26 +1,44 @@
 import {
   BookOpen,
+  Check,
+  ChevronDown,
   Download,
   Loader2,
   Menu,
   Mic,
   Moon,
+  PenTool,
   Plus,
   Square,
   Sun,
   User,
   X,
 } from 'lucide-react';
-import React, { useEffect, useRef, useState } from 'react';
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { formatJournalDateParts } from '../data/initialEntries';
 import { VoiceControl } from '../hooks/useVoiceRecorder';
 import {
   INK_COLORS,
   InkColorId,
+  JOURNAL_FONT_ORDER,
+  JOURNAL_FONTS,
   JournalSpread,
   PaperStyle,
 } from '../types/journal';
+import { InkCanvasLayer, InkToolConfig } from './InkCanvasLayer';
+
+export interface PageFocusRequest {
+  nonce: number;
+  spreadIndex: number;
+  side: 'left' | 'right';
+  caretOffset: number;
+}
 
 function formatElapsed(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -35,9 +53,19 @@ interface JournalPageContentProps {
   pageW: number;
   pageH: number;
   isMobile?: boolean;
+  isContinuation?: boolean;
   interactive?: boolean;
   locked?: boolean;
   onUpdateSpread?: (patch: Partial<JournalSpread>) => void;
+  onPageOverflow?: (
+    side: 'left' | 'right',
+    fitText: string,
+    overflowText: string,
+    moveFocus: boolean,
+    caretOffset: number
+  ) => void;
+  focusRequest?: PageFocusRequest | null;
+  onClearFocusRequest?: (nonce: number) => void;
   onNewSpread?: () => void;
   onOpenIndex?: () => void;
   onOpenExport?: () => void;
@@ -51,7 +79,22 @@ interface JournalPageContentProps {
   showCornerSheen?: boolean;
   voiceControl?: VoiceControl;
   onMenuOpenChange?: (open: boolean) => void;
+  inkConfig?: InkToolConfig;
+  inkToolbarOpen?: boolean;
+  onToggleInkToolbar?: (side: 'left' | 'right') => void;
+  onCommitInk?: (side: 'left' | 'right', nextSerialized: string) => void;
+  onPenActivity?: () => void;
+  onStylusActive?: (side: 'left' | 'right') => void;
+  onInkCapacityWarning?: (message: string) => void;
 }
+
+const DEFAULT_READONLY_INK_CONFIG: InkToolConfig = {
+  tool: 'fountain',
+  color: 'charcoal',
+  width: 2,
+  drawArmed: false,
+  allowTouchDraw: false,
+};
 
 export const JournalPageContent: React.FC<JournalPageContentProps> = ({
   spread,
@@ -60,9 +103,13 @@ export const JournalPageContent: React.FC<JournalPageContentProps> = ({
   pageW,
   pageH,
   isMobile = false,
+  isContinuation = false,
   interactive = true,
   locked = false,
   onUpdateSpread,
+  onPageOverflow,
+  focusRequest,
+  onClearFocusRequest,
   onNewSpread,
   onOpenIndex,
   onOpenExport,
@@ -76,37 +123,57 @@ export const JournalPageContent: React.FC<JournalPageContentProps> = ({
   showCornerSheen = false,
   voiceControl,
   onMenuOpenChange,
+  inkConfig = DEFAULT_READONLY_INK_CONFIG,
+  inkToolbarOpen = false,
+  onToggleInkToolbar,
+  onCommitInk,
+  onPenActivity,
+  onStylusActive,
+  onInkCapacityWarning,
 }) => {
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark, toggleTheme, journalFont, setJournalFont } = useTheme();
   const [editingDate, setEditingDate] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [fontMenuOpen, setFontMenuOpen] = useState(false);
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
+  const fontMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    onMenuOpenChange?.(menuOpen);
-  }, [menuOpen, onMenuOpenChange]);
+    onMenuOpenChange?.(menuOpen || fontMenuOpen);
+  }, [fontMenuOpen, menuOpen, onMenuOpenChange]);
 
   useEffect(() => {
     if (!interactive || locked) {
       setMenuOpen(false);
+      setFontMenuOpen(false);
     }
   }, [interactive, locked]);
 
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen && !fontMenuOpen) return;
 
     const handlePointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
       if (
+        menuOpen &&
         menuContainerRef.current &&
-        !menuContainerRef.current.contains(e.target as Node)
+        !menuContainerRef.current.contains(target)
       ) {
         setMenuOpen(false);
+      }
+      if (
+        fontMenuOpen &&
+        fontMenuRef.current &&
+        !fontMenuRef.current.contains(target)
+      ) {
+        setFontMenuOpen(false);
       }
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setMenuOpen(false);
+        setFontMenuOpen(false);
       }
     };
 
@@ -116,15 +183,18 @@ export const JournalPageContent: React.FC<JournalPageContentProps> = ({
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [menuOpen]);
+  }, [fontMenuOpen, menuOpen]);
 
   const ink = INK_COLORS[spread.inkColor] ?? INK_COLORS.charcoal;
   const activeInkHex = isDark ? ink.darkHex : ink.hex;
   const dateInfo = formatJournalDateParts(spread.date);
   const pageNumber = spreadIndex * 2 + (side === 'left' ? 1 : 2);
 
+  const activeFont = JOURNAL_FONTS[journalFont] ?? JOURNAL_FONTS.caveat;
+  const handFontFamily = activeFont.cssFamily;
   const scaleRatio = Math.min(1, Math.max(0.76, pageW / 470));
-  const handFontSize = Math.round(23 * scaleRatio);
+  const handFontSize = Math.round(23 * scaleRatio * activeFont.sizeScale);
+  const contextFontSize = Math.round(19 * activeFont.contextScale);
   const handLineHeight = 32;
 
   const paperRuleClass =
@@ -137,6 +207,197 @@ export const JournalPageContent: React.FC<JournalPageContentProps> = ({
   const paddingX = Math.round(isMobile ? 24 : 42 * scaleRatio);
   const paddingTop = Math.round(isMobile ? 20 : 30 * scaleRatio);
   const paddingBottom = Math.round(isMobile ? 18 : 26 * scaleRatio);
+
+  const bodyContainerRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const overflowMeasureRef = useRef<HTMLDivElement | null>(null);
+  const [bodyViewportHeight, setBodyViewportHeight] = useState<number>(0);
+
+  const bodyText = side === 'left' ? spread.leftBody : spread.rightBody;
+
+  useLayoutEffect(() => {
+    const el = bodyContainerRef.current;
+    if (!el) return;
+    const sync = () => {
+      const h = el.clientHeight || el.getBoundingClientRect().height;
+      if (h > 0) {
+        setBodyViewportHeight(h);
+      }
+    };
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const isCompactHeader = side === 'right' || isContinuation;
+  const estimatedBodyH = Math.max(
+    160,
+    pageH -
+      paddingTop -
+      paddingBottom -
+      (!isCompactHeader ? (isMobile ? 168 : 135) : isMobile ? 105 : 64) -
+      34
+  );
+  const effectiveViewportH =
+    bodyViewportHeight > 0 ? bodyViewportHeight : estimatedBodyH;
+  const maxLines = Math.max(
+    1,
+    Math.floor((effectiveViewportH - 2) / handLineHeight)
+  );
+  const writableHeightPx = maxLines * handLineHeight + 2;
+  const overflowThresholdPx = maxLines * handLineHeight + 6;
+
+  const splitOverflowAtBoundary = (
+    textValue: string,
+    caretPos: number
+  ): {
+    fitText: string;
+    overflowText: string;
+    moveFocus: boolean;
+    caretOffset: number;
+  } | null => {
+    const measureEl = overflowMeasureRef.current;
+    if (!measureEl || !textValue) return null;
+
+    const measureH = (candidate: string): number => {
+      if (!candidate) return 0;
+      measureEl.textContent = candidate.endsWith('\n')
+        ? `${candidate}\u200b`
+        : candidate;
+      return measureEl.offsetHeight || measureEl.getBoundingClientRect().height;
+    };
+
+    const fullH = measureH(textValue);
+    if (fullH <= overflowThresholdPx) {
+      measureEl.textContent = '';
+      return null;
+    }
+
+    let low = 0;
+    let high = textValue.length;
+    while (low < high) {
+      const mid = (low + high + 1) >> 1;
+      if (measureH(textValue.slice(0, mid)) <= overflowThresholdPx) {
+        low = mid;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    let splitIdx = low;
+    if (
+      splitIdx > 0 &&
+      splitIdx < textValue.length &&
+      !/\s/.test(textValue[splitIdx]) &&
+      !/\s/.test(textValue[splitIdx - 1])
+    ) {
+      const windowStart = Math.max(0, splitIdx - 42);
+      let foundWs = -1;
+      for (let i = splitIdx - 1; i >= windowStart; i--) {
+        if (/\s/.test(textValue[i])) {
+          foundWs = i;
+          break;
+        }
+      }
+      if (foundWs > 0) {
+        splitIdx = foundWs;
+      }
+    }
+
+    const fitText = textValue.slice(0, splitIdx);
+    const rawTail = textValue.slice(splitIdx);
+    const overflowText = rawTail.replace(/^[ \n]/, '');
+    const stripped = rawTail.length - overflowText.length;
+    const moveFocus = caretPos >= splitIdx;
+    const caretOffset = moveFocus
+      ? Math.max(0, caretPos - fitText.length - stripped)
+      : 0;
+
+    measureEl.textContent = '';
+    return { fitText, overflowText, moveFocus, caretOffset };
+  };
+
+  const handleBodyChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const nextValue = e.target.value;
+    const field = side === 'left' ? 'leftBody' : 'rightBody';
+
+    if (onPageOverflow && nextValue.length > bodyText.length) {
+      const caretPos = e.target.selectionStart ?? nextValue.length;
+      const split = splitOverflowAtBoundary(nextValue, caretPos);
+      if (split) {
+        onPageOverflow(
+          side,
+          split.fitText,
+          split.overflowText,
+          split.moveFocus,
+          split.caretOffset
+        );
+        return;
+      }
+    }
+
+    onUpdateSpread?.({ [field]: nextValue });
+  };
+
+  // Focus and place cursor cleanly after automatic overflow across pages/turns
+  useEffect(() => {
+    if (
+      !interactive ||
+      locked ||
+      !focusRequest ||
+      focusRequest.spreadIndex !== spreadIndex ||
+      focusRequest.side !== side
+    ) {
+      return;
+    }
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const pos = Math.max(0, Math.min(ta.value.length, focusRequest.caretOffset));
+    const rafId = requestAnimationFrame(() => {
+      ta.focus({ preventScroll: true });
+      try {
+        ta.setSelectionRange(pos, pos);
+      } catch {
+        // Ignore selection errors
+      }
+      onClearFocusRequest?.(focusRequest.nonce);
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [focusRequest, interactive, locked, onClearFocusRequest, side, spreadIndex]);
+
+  // Also flow overflow cleanly after voice dictation finishes on this page
+  const prevVoiceStatusRef = useRef<string | undefined>(voiceControl?.status);
+  const splitOverflowRef = useRef(splitOverflowAtBoundary);
+  splitOverflowRef.current = splitOverflowAtBoundary;
+
+  useEffect(() => {
+    const prevStatus = prevVoiceStatusRef.current;
+    const nextStatus = voiceControl?.status;
+    prevVoiceStatusRef.current = nextStatus;
+
+    if (
+      !interactive ||
+      locked ||
+      !onPageOverflow ||
+      prevStatus !== 'transcribing' ||
+      nextStatus !== 'idle' ||
+      !bodyText
+    ) {
+      return;
+    }
+
+    const split = splitOverflowRef.current(bodyText, bodyText.length);
+    if (split) {
+      onPageOverflow(
+        side,
+        split.fitText,
+        split.overflowText,
+        true,
+        split.caretOffset
+      );
+    }
+  }, [bodyText, interactive, locked, onPageOverflow, side, voiceControl?.status]);
 
   const isThisPageRecording = Boolean(
     voiceControl &&
@@ -240,6 +501,27 @@ export const JournalPageContent: React.FC<JournalPageContentProps> = ({
       >
         <Mic className="w-3 h-3 opacity-75" strokeWidth={1.65} />
         <span>Record</span>
+      </button>
+    );
+  };
+
+  const renderDrawToggle = () => {
+    if (!interactive || !onToggleInkToolbar) return null;
+    return (
+      <button
+        type="button"
+        disabled={locked}
+        aria-pressed={inkToolbarOpen}
+        onClick={() => onToggleInkToolbar(side)}
+        title="Open Apple Pencil & drawing tools (Apple Pencil also writes anytime)"
+        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11.5px] sm:text-[12px] transition-colors cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#57361e] dark:focus-visible:ring-[#deb488] ${
+          inkToolbarOpen
+            ? 'bg-[#3a231c] dark:bg-[#deb488] text-[#faf6ed] dark:text-[#1b1511] font-medium'
+            : 'text-[#847461] dark:text-[#9f917f] hover:text-[#261f19] dark:hover:text-[#ece3d4]'
+        }`}
+      >
+        <PenTool className="w-3 h-3 opacity-80" strokeWidth={1.7} />
+        <span>Draw</span>
       </button>
     );
   };
@@ -375,6 +657,37 @@ export const JournalPageContent: React.FC<JournalPageContentProps> = ({
 
           <div className="my-1 border-t border-[#8c7960]/20 dark:border-[#423a32]" />
 
+          <div className="px-3.5 py-1.5">
+            <div className="text-[11px] tracking-wide text-[#8a7966] dark:text-[#9f917f] mb-1.5">
+              Font style
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              {JOURNAL_FONT_ORDER.map((id) => {
+                const opt = JOURNAL_FONTS[id];
+                const active = journalFont === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={active}
+                    onClick={() => setJournalFont(id)}
+                    className={`px-2 py-1 rounded text-left text-[13px] leading-tight transition-colors cursor-pointer truncate ${
+                      active
+                        ? 'bg-[#3a231c] dark:bg-[#d7c4a5] text-[#f6f1e6] dark:text-[#1b1511] font-medium'
+                        : 'bg-[#f1e9da]/70 dark:bg-[#2c2722] text-[#3a2d22] dark:text-[#d5c8b6] hover:bg-[#e6dcc8] dark:hover:bg-[#38312b]'
+                    }`}
+                    style={{ fontFamily: opt.cssFamily }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="my-1 border-t border-[#8c7960]/20 dark:border-[#423a32]" />
+
           <button
             type="button"
             role="menuitem"
@@ -436,202 +749,368 @@ export const JournalPageContent: React.FC<JournalPageContentProps> = ({
 
       {side === 'left' ? (
         <>
-          {/* TOP LEFT: Date + Little Options */}
-          <div
-            className={`relative ${
-              menuOpen ? 'z-30' : 'z-10'
-            } pb-2.5 mb-2 border-b border-[#7c6952]/20 dark:border-[#423a32]`}
-          >
-            {isMobile ? (
-              <div className="mb-2 flex items-center justify-end">
-                {renderActionsRow(true)}
-              </div>
-            ) : null}
-
-            <div className="flex items-start justify-between gap-2 min-h-[46px]">
-              {interactive && editingDate ? (
-                <input
-                  type="date"
-                  value={spread.date}
-                  autoFocus
-                  onBlur={() => setEditingDate(false)}
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      onUpdateSpread?.({ date: e.target.value });
-                    }
-                  }}
-                  className="w-fit font-serif text-base sm:text-lg font-medium text-[#2c241d] dark:text-[#ece3d4] bg-[#ebe2d1] dark:bg-[#26221e] px-2 py-0.5 rounded border border-[#8c775c]/40 dark:border-[#4e453b] focus:outline-none focus:border-[#57361e] dark:focus:border-[#deb488]"
-                />
-              ) : (
-                <button
-                  type="button"
-                  disabled={!interactive || locked}
-                  onClick={() => interactive && !locked && setEditingDate(true)}
-                  title={interactive ? 'Click to change entry date' : undefined}
-                  className={`text-left group focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#57361e] dark:focus-visible:ring-[#deb488] rounded ${
-                    interactive ? 'cursor-pointer' : 'cursor-default'
-                  }`}
-                >
-                  <div className="text-[11px] sm:text-[12px] tracking-[0.06em] text-[#786755] dark:text-[#9f917f] font-medium">
-                    {dateInfo.weekday}
+          {/* TOP LEFT: Full Date + Options on first spread of date, or simple compact bar on continuation spreads */}
+          {isContinuation ? (
+            <div
+              className={`relative ${
+                menuOpen ? 'z-30' : 'z-10'
+              } pb-2.5 mb-2 border-b border-[#7c6952]/20 dark:border-[#423a32]`}
+            >
+              {isMobile ? (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs italic text-[#7a6957] dark:text-[#9f917f] truncate">
+                      Continued · {dateInfo.monthDay}
+                    </span>
+                    {renderActionsRow(true)}
                   </div>
-                  <h1 className="font-serif text-[22px] sm:text-[26px] leading-tight font-semibold text-[#261f19] dark:text-[#ece3d4] tracking-tight group-hover:text-[#57361e] dark:group-hover:text-[#deb488] transition-colors">
-                    {dateInfo.monthDay}
-                    {dateInfo.year ? (
-                      <span className="font-normal text-[#6f5f4d] dark:text-[#9f917f]">
-                        , {dateInfo.year}
-                      </span>
-                    ) : null}
-                  </h1>
-                </button>
+                  {interactive ? (
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {renderDrawToggle()}
+                        {voiceControl ? renderVoiceControl() : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="flex items-center justify-between gap-2 min-h-[30px]">
+                  <div className="shrink-0 flex items-center gap-2">
+                    {renderDrawToggle()}
+                    {renderVoiceControl()}
+                  </div>
+                  <span className="text-xs italic text-[#7a6957] dark:text-[#9f917f] whitespace-nowrap shrink-0 truncate">
+                    Continued · {dateInfo.monthDay}
+                  </span>
+                </div>
               )}
-
-              <div className="pt-0.5 shrink-0">{renderVoiceControl()}</div>
+              {renderVoiceError()}
             </div>
+          ) : (
+            <div
+              className={`relative ${
+                menuOpen || fontMenuOpen ? 'z-30' : 'z-10'
+              } pb-2.5 mb-2 border-b border-[#7c6952]/20 dark:border-[#423a32]`}
+            >
+              {isMobile ? (
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
+                    {renderDrawToggle()}
+                    {renderVoiceControl()}
+                  </div>
+                  {renderActionsRow(true)}
+                </div>
+              ) : null}
 
-            {/* Little Options directly below the date */}
-            <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[12px] sm:text-[13px] text-[#6d5d4b] dark:text-[#9f917f]">
-              <div className="flex items-center gap-2">
-                <span className="text-[#8a7966] dark:text-[#8f8170] text-xs">Ink</span>
-                <div className="flex items-center gap-1.5">
-                  {(Object.keys(INK_COLORS) as InkColorId[]).map((id) => {
-                    const active = spread.inkColor === id;
+              <div className="flex items-start justify-between gap-2 min-h-[46px]">
+                {interactive && editingDate ? (
+                  <input
+                    type="date"
+                    value={spread.date}
+                    autoFocus
+                    onBlur={() => setEditingDate(false)}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        onUpdateSpread?.({ date: e.target.value });
+                      }
+                    }}
+                    className="w-fit font-serif text-base sm:text-lg font-medium text-[#2c241d] dark:text-[#ece3d4] bg-[#ebe2d1] dark:bg-[#26221e] px-2 py-0.5 rounded border border-[#8c775c]/40 dark:border-[#4e453b] focus:outline-none focus:border-[#57361e] dark:focus:border-[#deb488]"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!interactive || locked}
+                    onClick={() => interactive && !locked && setEditingDate(true)}
+                    title={interactive ? 'Click to change entry date' : undefined}
+                    className={`text-left group focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#57361e] dark:focus-visible:ring-[#deb488] rounded ${
+                      interactive ? 'cursor-pointer' : 'cursor-default'
+                    }`}
+                  >
+                    <div className="text-[11px] sm:text-[12px] tracking-[0.06em] text-[#786755] dark:text-[#9f917f] font-medium">
+                      {dateInfo.weekday}
+                    </div>
+                    <h1 className="font-serif text-[22px] sm:text-[26px] leading-tight font-semibold text-[#261f19] dark:text-[#ece3d4] tracking-tight group-hover:text-[#57361e] dark:group-hover:text-[#deb488] transition-colors">
+                      {dateInfo.monthDay}
+                      {dateInfo.year ? (
+                        <span className="font-normal text-[#6f5f4d] dark:text-[#9f917f]">
+                          , {dateInfo.year}
+                        </span>
+                      ) : null}
+                    </h1>
+                  </button>
+                )}
+
+                {!isMobile ? (
+                  <div className="pt-0.5 shrink-0 flex items-center gap-2">
+                    {renderDrawToggle()}
+                    {renderVoiceControl()}
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Little Options directly below the date */}
+              <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[12px] sm:text-[13px] text-[#6d5d4b] dark:text-[#9f917f]">
+                <div className="flex items-center gap-2">
+                  <span className="text-[#8a7966] dark:text-[#8f8170] text-xs">Ink</span>
+                  <div className="flex items-center gap-1.5">
+                    {(Object.keys(INK_COLORS) as InkColorId[]).map((id) => {
+                      const active = spread.inkColor === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          disabled={!interactive || locked}
+                          aria-label={INK_COLORS[id].label}
+                          title={INK_COLORS[id].label}
+                          onClick={() =>
+                            interactive &&
+                            !locked &&
+                            onUpdateSpread?.({ inkColor: id })
+                          }
+                          className={`w-3.5 h-3.5 rounded-full transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#57361e] dark:focus-visible:ring-[#deb488] ${
+                            interactive ? 'cursor-pointer hover:scale-110' : ''
+                          } ${
+                            active
+                              ? 'ring-1 ring-offset-2 ring-offset-[#f6f1e6] dark:ring-offset-[#1d1a17] ring-[#3b2f24] dark:ring-[#e8dfd1] scale-110'
+                              : 'opacity-70 hover:opacity-100'
+                          }`}
+                          style={{
+                            backgroundColor: isDark
+                              ? INK_COLORS[id].darkSwatch
+                              : INK_COLORS[id].swatch,
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <span aria-hidden="true" className="text-[#b8a792] dark:text-[#4e453b]">
+                  ·
+                </span>
+
+                <div className="flex items-center gap-2.5">
+                  {(['ruled', 'dotted', 'blank'] as PaperStyle[]).map((style) => {
+                    const active = spread.paperStyle === style;
+                    const label =
+                      style === 'ruled'
+                        ? 'Ruled'
+                        : style === 'dotted'
+                          ? 'Dotted'
+                          : 'Blank';
                     return (
                       <button
-                        key={id}
+                        key={style}
                         type="button"
                         disabled={!interactive || locked}
-                        aria-label={INK_COLORS[id].label}
-                        title={INK_COLORS[id].label}
                         onClick={() =>
                           interactive &&
                           !locked &&
-                          onUpdateSpread?.({ inkColor: id })
+                          onUpdateSpread?.({ paperStyle: style })
                         }
-                        className={`w-3.5 h-3.5 rounded-full transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#57361e] dark:focus-visible:ring-[#deb488] ${
-                          interactive ? 'cursor-pointer hover:scale-110' : ''
+                        className={`whitespace-nowrap shrink-0 transition-colors focus-visible:outline-none focus-visible:underline ${
+                          interactive ? 'cursor-pointer' : ''
                         } ${
                           active
-                            ? 'ring-1 ring-offset-2 ring-offset-[#f6f1e6] dark:ring-offset-[#1d1a17] ring-[#3b2f24] dark:ring-[#e8dfd1] scale-110'
-                            : 'opacity-70 hover:opacity-100'
+                            ? 'text-[#261f19] dark:text-[#ece3d4] font-semibold underline decoration-[#8b6b4a]/60 dark:decoration-[#deb488]/60 underline-offset-4'
+                            : 'text-[#847461] dark:text-[#968775] hover:text-[#3b2f24] dark:hover:text-[#ece3d4]'
                         }`}
-                        style={{
-                          backgroundColor: isDark
-                            ? INK_COLORS[id].darkSwatch
-                            : INK_COLORS[id].swatch,
-                        }}
-                      />
+                      >
+                        {label}
+                      </button>
                     );
                   })}
                 </div>
-              </div>
 
-              <span aria-hidden="true" className="text-[#b8a792] dark:text-[#4e453b]">
-                ·
-              </span>
+                <span aria-hidden="true" className="text-[#b8a792] dark:text-[#4e453b]">
+                  ·
+                </span>
 
-              <div className="flex items-center gap-2.5">
-                {(['ruled', 'dotted', 'blank'] as PaperStyle[]).map((style) => {
-                  const active = spread.paperStyle === style;
-                  const label =
-                    style === 'ruled'
-                      ? 'Ruled'
-                      : style === 'dotted'
-                        ? 'Dotted'
-                        : 'Blank';
-                  return (
-                    <button
-                      key={style}
-                      type="button"
-                      disabled={!interactive || locked}
-                      onClick={() =>
-                        interactive &&
-                        !locked &&
-                        onUpdateSpread?.({ paperStyle: style })
-                      }
-                      className={`whitespace-nowrap shrink-0 transition-colors focus-visible:outline-none focus-visible:underline ${
-                        interactive ? 'cursor-pointer' : ''
-                      } ${
-                        active
-                          ? 'text-[#261f19] dark:text-[#ece3d4] font-semibold underline decoration-[#8b6b4a]/60 dark:decoration-[#deb488]/60 underline-offset-4'
-                          : 'text-[#847461] dark:text-[#968775] hover:text-[#3b2f24] dark:hover:text-[#ece3d4]'
-                      }`}
+                <div
+                  ref={interactive ? fontMenuRef : undefined}
+                  className="relative flex items-center"
+                >
+                  <button
+                    type="button"
+                    disabled={!interactive || locked}
+                    aria-haspopup="menu"
+                    aria-expanded={interactive ? fontMenuOpen : false}
+                    onClick={() => {
+                      if (!interactive || locked) return;
+                      setMenuOpen(false);
+                      setFontMenuOpen((prev) => !prev);
+                    }}
+                    title="Change writing font"
+                    className={`inline-flex items-center gap-0.5 whitespace-nowrap shrink-0 transition-colors focus-visible:outline-none focus-visible:underline ${
+                      interactive ? 'cursor-pointer' : ''
+                    } ${
+                      fontMenuOpen
+                        ? 'text-[#261f19] dark:text-[#ece3d4] font-semibold underline decoration-[#8b6b4a]/60 dark:decoration-[#deb488]/60 underline-offset-4'
+                        : 'text-[#847461] dark:text-[#968775] hover:text-[#3b2f24] dark:hover:text-[#ece3d4]'
+                    }`}
+                  >
+                    <span>Font: {activeFont.shortLabel}</span>
+                    <ChevronDown className="w-3 h-3 opacity-75" />
+                  </button>
+
+                  {interactive && fontMenuOpen ? (
+                    <div
+                      role="menu"
+                      aria-label="Journal font style"
+                      className="absolute left-0 top-full mt-2 w-44 rounded-md bg-[#faf6ed] dark:bg-[#231f1b] border border-[#8c775c]/35 dark:border-[#4d4339] shadow-lg dark:shadow-2xl py-1 z-50 text-[#2e251d] dark:text-[#ece3d4]"
                     >
-                      {label}
-                    </button>
-                  );
-                })}
+                      {JOURNAL_FONT_ORDER.map((id) => {
+                        const opt = JOURNAL_FONTS[id];
+                        const active = journalFont === id;
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={active}
+                            onClick={() => {
+                              setJournalFont(id);
+                              setFontMenuOpen(false);
+                            }}
+                            className={`w-full px-3 py-1.5 flex items-center justify-between gap-2 text-left transition-colors cursor-pointer ${
+                              active
+                                ? 'bg-[#efe6d6] dark:bg-[#2f2924] text-[#261f19] dark:text-[#ece3d4] font-medium'
+                                : 'hover:bg-[#efe6d6]/70 dark:hover:bg-[#2f2924]/70'
+                            }`}
+                          >
+                            <span
+                              className="text-[16px] leading-snug"
+                              style={{ fontFamily: opt.cssFamily }}
+                            >
+                              {opt.label}
+                            </span>
+                            {active ? (
+                              <Check className="w-3.5 h-3.5 text-[#57361e] dark:text-[#deb488] shrink-0" />
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
 
-            {/* Fixed-height quiet setting/mood line */}
-            <div className="mt-1.5 h-[26px] flex items-center">
+              {/* Fixed-height quiet setting/mood line */}
+              <div className="mt-1.5 h-[26px] flex items-center">
+                {interactive ? (
+                  <input
+                    type="text"
+                    value={spread.contextNote}
+                    readOnly={locked}
+                    placeholder="Quiet note (weather, place, mood)..."
+                    onChange={(e) =>
+                      onUpdateSpread?.({ contextNote: e.target.value })
+                    }
+                    className="w-full h-[26px] bg-transparent ink-prose leading-[26px] text-[#6a5948] dark:text-[#b7a896] placeholder:text-[#ab9b87]/80 dark:placeholder:text-[#6f6356] focus:outline-none focus:text-[#2c241d] dark:focus:text-[#ece3d4] select-text"
+                    style={{
+                      fontFamily: handFontFamily,
+                      fontSize: `${contextFontSize}px`,
+                    }}
+                  />
+                ) : (
+                  <div
+                    className="w-full h-[26px] ink-prose leading-[26px] truncate"
+                    style={{
+                      fontFamily: handFontFamily,
+                      fontSize: `${contextFontSize}px`,
+                    }}
+                  >
+                    {spread.contextNote ? (
+                      <span className="text-[#6a5948] dark:text-[#b7a896]">
+                        {spread.contextNote}
+                      </span>
+                    ) : showEmptyPlaceholders ? (
+                      <span className="text-[#ab9b87]/80 dark:text-[#6f6356]">
+                        Quiet note (weather, place, mood)...
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+              {renderVoiceError()}
+            </div>
+          )}
+
+          {/* LEFT PAGE FIXED PHYSICAL SHEET (NO SCROLL + RULED LINES + TEXT + STYLUS INK) */}
+          <div
+            ref={bodyContainerRef}
+            className={`relative z-10 flex-1 min-h-0 overflow-hidden ${paperRuleClass}`}
+          >
+            <div
+              ref={overflowMeasureRef}
+              aria-hidden="true"
+              className="pointer-events-none invisible absolute top-0 left-0 right-0 whitespace-pre-wrap break-words ink-prose m-0 p-0 border-0"
+              style={{
+                fontFamily: handFontFamily,
+                fontSize: `${handFontSize}px`,
+                lineHeight: `${handLineHeight}px`,
+                paddingTop: '1px',
+              }}
+            />
+            <InkCanvasLayer
+              serializedInk={spread.leftInk}
+              interactive={interactive}
+              locked={locked}
+              isDark={isDark}
+              inkConfig={inkConfig}
+              onCommitInk={(nextInk) => onCommitInk?.('left', nextInk)}
+              onPenActivity={onPenActivity}
+              onStylusActive={() => onStylusActive?.('left')}
+              onCapacityWarning={onInkCapacityWarning}
+            >
               {interactive ? (
-                <input
-                  type="text"
-                  value={spread.contextNote}
+                <textarea
+                  ref={textareaRef}
+                  value={spread.leftBody}
                   readOnly={locked}
-                  placeholder="Quiet note (weather, place, mood)..."
-                  onChange={(e) =>
-                    onUpdateSpread?.({ contextNote: e.target.value })
+                  onChange={handleBodyChange}
+                  placeholder={
+                    inkConfig.drawArmed || spread.leftInk
+                      ? ''
+                      : isContinuation
+                        ? 'Continue writing...'
+                        : "Begin writing today's page..."
                   }
-                  className="w-full h-[26px] bg-transparent font-hand ink-prose text-[19px] leading-[26px] text-[#6a5948] dark:text-[#b7a896] placeholder:text-[#ab9b87]/80 dark:placeholder:text-[#6f6356] focus:outline-none focus:text-[#2c241d] dark:focus:text-[#ece3d4] select-text"
+                  spellCheck={false}
+                  className="w-full resize-none overflow-hidden bg-transparent ink-prose focus:outline-none select-text placeholder:text-[#ab9c88]/70 dark:placeholder:text-[#6c6053] m-0 p-0 border-0"
+                  style={{
+                    height: `${writableHeightPx}px`,
+                    color: activeInkHex,
+                    fontFamily: handFontFamily,
+                    fontSize: `${handFontSize}px`,
+                    lineHeight: `${handLineHeight}px`,
+                    paddingTop: '1px',
+                  }}
                 />
               ) : (
-                <div className="w-full h-[26px] font-hand ink-prose text-[19px] leading-[26px] truncate">
-                  {spread.contextNote ? (
-                    <span className="text-[#6a5948] dark:text-[#b7a896]">
-                      {spread.contextNote}
-                    </span>
-                  ) : showEmptyPlaceholders ? (
-                    <span className="text-[#ab9b87]/80 dark:text-[#6f6356]">
-                      Quiet note (weather, place, mood)...
+                <div
+                  className="w-full overflow-hidden whitespace-pre-wrap break-words ink-prose"
+                  style={{
+                    height: `${writableHeightPx}px`,
+                    color: activeInkHex,
+                    fontFamily: handFontFamily,
+                    fontSize: `${handFontSize}px`,
+                    lineHeight: `${handLineHeight}px`,
+                    paddingTop: '1px',
+                  }}
+                >
+                  {spread.leftBody ? (
+                    spread.leftBody
+                  ) : showEmptyPlaceholders && !spread.leftInk ? (
+                    <span className="text-[#ab9c88]/70 dark:text-[#6c6053]">
+                      {isContinuation
+                        ? 'Continue writing...'
+                        : "Begin writing today's page..."}
                     </span>
                   ) : null}
                 </div>
               )}
-            </div>
-            {renderVoiceError()}
-          </div>
-
-          {/* LEFT PAGE HANDWRITTEN BODY */}
-          <div className={`relative z-10 flex-1 min-h-0 ${paperRuleClass}`}>
-            {interactive ? (
-              <textarea
-                value={spread.leftBody}
-                readOnly={locked}
-                onChange={(e) =>
-                  onUpdateSpread?.({ leftBody: e.target.value })
-                }
-                placeholder="Begin writing today's page..."
-                spellCheck={false}
-                className="w-full h-full resize-none bg-transparent font-hand ink-prose focus:outline-none journal-scroll select-text placeholder:text-[#ab9c88]/70 dark:placeholder:text-[#6c6053] m-0 p-0 border-0"
-                style={{
-                  color: activeInkHex,
-                  fontSize: `${handFontSize}px`,
-                  lineHeight: `${handLineHeight}px`,
-                  paddingTop: '1px',
-                }}
-              />
-            ) : (
-              <div
-                className="w-full h-full overflow-hidden whitespace-pre-wrap break-words font-hand ink-prose"
-                style={{
-                  color: activeInkHex,
-                  fontSize: `${handFontSize}px`,
-                  lineHeight: `${handLineHeight}px`,
-                  paddingTop: '1px',
-                }}
-              >
-                {spread.leftBody ? (
-                  spread.leftBody
-                ) : showEmptyPlaceholders ? (
-                  <span className="text-[#ab9c88]/70 dark:text-[#6c6053]">
-                    Begin writing today&apos;s page...
-                  </span>
-                ) : null}
-              </div>
-            )}
+            </InkCanvasLayer>
           </div>
 
           {/* LEFT PAGE FOOTER */}
@@ -677,53 +1156,92 @@ export const JournalPageContent: React.FC<JournalPageContentProps> = ({
                   </span>
                   {renderActionsRow(true)}
                 </div>
-                {interactive && voiceControl ? (
+                {interactive ? (
                   <div className="mt-2 flex items-center justify-between gap-2">
-                    {renderVoiceControl()}
+                    <div className="flex items-center gap-2">
+                      {renderDrawToggle()}
+                      {voiceControl ? renderVoiceControl() : null}
+                    </div>
                   </div>
                 ) : null}
               </>
             ) : (
               <div className="flex items-center justify-between gap-2">
-                <div className="shrink-0">{renderVoiceControl()}</div>
+                <div className="shrink-0 flex items-center gap-2">
+                  {renderDrawToggle()}
+                  {renderVoiceControl()}
+                </div>
                 {renderActionsRow(pageW < 360)}
               </div>
             )}
             {renderVoiceError()}
           </div>
 
-          {/* RIGHT PAGE HANDWRITTEN BODY */}
-          <div className={`relative z-10 flex-1 min-h-0 ${paperRuleClass}`}>
-            {interactive ? (
-              <textarea
-                value={spread.rightBody}
-                readOnly={locked}
-                onChange={(e) =>
-                  onUpdateSpread?.({ rightBody: e.target.value })
-                }
-                placeholder="Continue your thoughts on the facing page..."
-                spellCheck={false}
-                className="w-full h-full resize-none bg-transparent font-hand ink-prose focus:outline-none journal-scroll select-text placeholder:text-[#ab9c88]/70 dark:placeholder:text-[#6c6053] m-0 p-0 border-0"
-                style={{
-                  color: activeInkHex,
-                  fontSize: `${handFontSize}px`,
-                  lineHeight: `${handLineHeight}px`,
-                  paddingTop: '1px',
-                }}
-              />
-            ) : (
-              <div
-                className="w-full h-full overflow-hidden whitespace-pre-wrap break-words font-hand ink-prose"
-                style={{
-                  color: activeInkHex,
-                  fontSize: `${handFontSize}px`,
-                  lineHeight: `${handLineHeight}px`,
-                  paddingTop: '1px',
-                }}
-              >
-                {spread.rightBody}
-              </div>
-            )}
+          {/* RIGHT PAGE FIXED PHYSICAL SHEET (NO SCROLL + RULED LINES + TEXT + STYLUS INK) */}
+          <div
+            ref={bodyContainerRef}
+            className={`relative z-10 flex-1 min-h-0 overflow-hidden ${paperRuleClass}`}
+          >
+            <div
+              ref={overflowMeasureRef}
+              aria-hidden="true"
+              className="pointer-events-none invisible absolute top-0 left-0 right-0 whitespace-pre-wrap break-words ink-prose m-0 p-0 border-0"
+              style={{
+                fontFamily: handFontFamily,
+                fontSize: `${handFontSize}px`,
+                lineHeight: `${handLineHeight}px`,
+                paddingTop: '1px',
+              }}
+            />
+            <InkCanvasLayer
+              serializedInk={spread.rightInk}
+              interactive={interactive}
+              locked={locked}
+              isDark={isDark}
+              inkConfig={inkConfig}
+              onCommitInk={(nextInk) => onCommitInk?.('right', nextInk)}
+              onPenActivity={onPenActivity}
+              onStylusActive={() => onStylusActive?.('right')}
+              onCapacityWarning={onInkCapacityWarning}
+            >
+              {interactive ? (
+                <textarea
+                  ref={textareaRef}
+                  value={spread.rightBody}
+                  readOnly={locked}
+                  onChange={handleBodyChange}
+                  placeholder={
+                    inkConfig.drawArmed || spread.rightInk
+                      ? ''
+                      : 'Continue your thoughts on the facing page...'
+                  }
+                  spellCheck={false}
+                  className="w-full resize-none overflow-hidden bg-transparent ink-prose focus:outline-none select-text placeholder:text-[#ab9c88]/70 dark:placeholder:text-[#6c6053] m-0 p-0 border-0"
+                  style={{
+                    height: `${writableHeightPx}px`,
+                    color: activeInkHex,
+                    fontFamily: handFontFamily,
+                    fontSize: `${handFontSize}px`,
+                    lineHeight: `${handLineHeight}px`,
+                    paddingTop: '1px',
+                  }}
+                />
+              ) : (
+                <div
+                  className="w-full overflow-hidden whitespace-pre-wrap break-words ink-prose"
+                  style={{
+                    height: `${writableHeightPx}px`,
+                    color: activeInkHex,
+                    fontFamily: handFontFamily,
+                    fontSize: `${handFontSize}px`,
+                    lineHeight: `${handLineHeight}px`,
+                    paddingTop: '1px',
+                  }}
+                >
+                  {spread.rightBody}
+                </div>
+              )}
+            </InkCanvasLayer>
           </div>
 
           {/* RIGHT PAGE FOOTER */}

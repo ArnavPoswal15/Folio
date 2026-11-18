@@ -12,7 +12,8 @@ import {
   Point,
   TurnDirection,
 } from '../utils/pageCurlGeometry';
-import { JournalPageContent } from './JournalPageContent';
+import { InkToolConfig } from './InkCanvasLayer';
+import { JournalPageContent, PageFocusRequest } from './JournalPageContent';
 import { WelcomeSpreadContent } from './WelcomeSpreadContent';
 
 export type BookPhase = 'closed' | 'opening' | 'open' | 'closing';
@@ -44,6 +45,24 @@ interface PageCurlStageProps {
   onDismissWelcome: () => void;
   onCloseBook: () => void;
   voiceControl?: VoiceControl;
+  inkConfig?: InkToolConfig;
+  inkToolbarOpen?: boolean;
+  onToggleInkToolbar?: (side: 'left' | 'right') => void;
+  onCommitInk?: (
+    spreadIndex: number,
+    side: 'left' | 'right',
+    nextSerialized: string
+  ) => void;
+  onStylusActive?: (spreadIndex: number, side: 'left' | 'right') => void;
+  onInkCapacityWarning?: (message: string) => void;
+  onStageContinuationSpread?: (
+    index: number,
+    rightBodyFit: string,
+    overflowLeftBody: string
+  ) => number;
+  focusRequest?: PageFocusRequest | null;
+  onRequestFocus?: (req: Omit<PageFocusRequest, 'nonce'>) => void;
+  onClearFocusRequest?: (nonce: number) => void;
 }
 
 interface CurlRuntimeState {
@@ -66,6 +85,61 @@ function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || !window.matchMedia) return false;
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
+
+const RIBBON_L = 68; // resistance: larger = looser, smaller = stiffer
+const RIBBON_W = 16;
+const RIBBON_BASE_LENGTH = 36; // 8px tucked inside binding + 28px hanging below
+const RIBBON_K = 260; // spring stiffness
+const RIBBON_ZETA = 0.2; // low damping ratio for lively "boing" bounce
+
+function ribbonRubber(d: number): number {
+  if (d <= 0) return Math.max(d * 0.24, -10);
+  return RIBBON_L * (1 - Math.exp(-d / RIBBON_L));
+}
+
+function ribbonInverse(pull: number): number {
+  if (pull <= 0) return pull / 0.24;
+  return -RIBBON_L * Math.log(1 - Math.min(pull, RIBBON_L * 0.999) / RIBBON_L);
+}
+
+function buildRibbonPath(pull: number, sway: number): {
+  d: string;
+  sheenOpacity: number;
+} {
+  const cx = RIBBON_W / 2;
+  const topHalfW = RIBBON_W / 2;
+  const stretch = Math.max(-0.25, Math.min(1, pull / RIBBON_L));
+  const tailHalfW = topHalfW * (1 - 0.34 * stretch);
+
+  const tipY = Math.max(14, RIBBON_BASE_LENGTH + pull);
+  const notchDepth = Math.max(6, 9 * (1 - 0.16 * Math.max(0, stretch)));
+  const notchY = tipY - notchDepth;
+  const tipCx = cx + sway;
+
+  const leftTop = cx - topHalfW;
+  const rightTop = cx + topHalfW;
+  const leftTip = tipCx - tailHalfW;
+  const rightTip = tipCx + tailHalfW;
+
+  const midY = tipY * 0.55;
+  const ctrlHalfW = topHalfW * 0.45 + tailHalfW * 0.55;
+  const leftCtrlX = cx + sway * 0.28 - ctrlHalfW;
+  const rightCtrlX = cx + sway * 0.28 + ctrlHalfW;
+
+  const d = [
+    `M ${leftTop.toFixed(2)} 0`,
+    `Q ${leftCtrlX.toFixed(2)} ${midY.toFixed(2)} ${leftTip.toFixed(2)} ${tipY.toFixed(2)}`,
+    `L ${tipCx.toFixed(2)} ${notchY.toFixed(2)}`,
+    `L ${rightTip.toFixed(2)} ${tipY.toFixed(2)}`,
+    `Q ${rightCtrlX.toFixed(2)} ${midY.toFixed(2)} ${rightTop.toFixed(2)} 0`,
+    'Z',
+  ].join(' ');
+
+  const sheenOpacity = Math.max(0, Math.min(0.4, stretch * 0.4));
+  return { d, sheenOpacity };
+}
+
+const INITIAL_RIBBON_PATH = buildRibbonPath(0, 0).d;
 
 export const PageCurlStage: React.FC<PageCurlStageProps> = ({
   spreads,
@@ -94,14 +168,54 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
   onDismissWelcome,
   onCloseBook,
   voiceControl,
+  inkConfig,
+  inkToolbarOpen = false,
+  onToggleInkToolbar,
+  onCommitInk,
+  onStylusActive,
+  onInkCapacityWarning,
+  onStageContinuationSpread,
+  focusRequest,
+  onRequestFocus,
+  onClearFocusRequest,
 }) => {
   const { isDark } = useTheme();
   const spreadRef = useRef<HTMLDivElement | null>(null);
   const bookWrapperRef = useRef<HTMLDivElement | null>(null);
+  const deskShadowRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const coverRef = useRef<HTMLDivElement | null>(null);
+  const coverFrontRef = useRef<HTMLButtonElement | null>(null);
+  const coverBackRef = useRef<HTMLDivElement | null>(null);
   const mobileBackFaceRef = useRef<HTMLDivElement | null>(null);
   const rightShadowRef = useRef<HTMLDivElement | null>(null);
+
+  const ribbonPathRef = useRef<SVGPathElement | null>(null);
+  const ribbonSheenPathRef = useRef<SVGPathElement | null>(null);
+  const ribbonSimRef = useRef<{
+    pull: number;
+    vel: number;
+    dragSway: number;
+    dragSwayVel: number;
+    rafId: number | null;
+    lastTime: number;
+    pointerId: number | null;
+    startClientX: number;
+    startClientY: number;
+    hasMoved: boolean;
+  }>({
+    pull: 0,
+    vel: 0,
+    dragSway: 0,
+    dragSwayVel: 0,
+    rafId: null,
+    lastTime: 0,
+    pointerId: null,
+    startClientX: 0,
+    startClientY: 0,
+    hasMoved: false,
+  });
+  const [isTuggingRibbon, setIsTuggingRibbon] = useState(false);
 
   const coverProgressRef = useRef<{ p: number }>({ p: 0 });
   const coverTweenRef = useRef<gsap.core.Tween | null>(null);
@@ -115,6 +229,11 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
   const [curlState, setCurlState] = useState<CurlRuntimeState>(IDLE_CURL);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const curlRef = useRef<CurlRuntimeState>(IDLE_CURL);
+  const lastPenActivityRef = useRef<number>(0);
+
+  const handlePenActivity = useCallback(() => {
+    lastPenActivityRef.current = performance.now();
+  }, []);
 
   const updateCurl = useCallback((next: CurlRuntimeState) => {
     curlRef.current = next;
@@ -149,55 +268,86 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
   const halfBookW = pageW + 11;
   const fullBookH = pageH + 22;
 
+  const poseMetricsRef = useRef({ halfBookW, isMobile, pageW });
+  poseMetricsRef.current = { halfBookW, isMobile, pageW };
+
   // Apply deterministic 3D book-cover pose without ever altering opacity on preserve-3d coverRef
-  const applyCoverPose = useCallback(
-    (p: number) => {
-      const clamped = Math.max(0, Math.min(1, p));
-      const wrapper = bookWrapperRef.current;
-      const frame = frameRef.current;
-      const cover = coverRef.current;
-      const mobileBack = mobileBackFaceRef.current;
-      const rightShadow = rightShadowRef.current;
+  const applyCoverPose = useCallback((p: number, phase: BookPhase) => {
+    const {
+      halfBookW: hbw,
+      isMobile: mobile,
+      pageW: pw,
+    } = poseMetricsRef.current;
+    const clamped = Math.max(0, Math.min(1, p));
+    const angle = mobile ? -clamped * 115 : -clamped * 180;
+    const pastNinety = Math.abs(angle) > 90;
 
-      if (wrapper) {
-        const targetX = isMobile ? 0 : (-(pageW + 11) / 2) * (1 - clamped);
-        gsap.set(wrapper, { x: targetX });
-      }
+    const wrapper = bookWrapperRef.current;
+    const deskShadow = deskShadowRef.current;
+    const frame = frameRef.current;
+    const cover = coverRef.current;
+    const coverFront = coverFrontRef.current;
+    const coverBack = coverBackRef.current;
+    const mobileBack = mobileBackFaceRef.current;
+    const rightShadow = rightShadowRef.current;
 
-      if (frame) {
-        if (isMobile || clamped >= 0.998) {
-          frame.style.clipPath = 'none';
-        } else {
-          // Clip only the Left Half behind cover while keeping negative top/right/bottom margins so ribbon & desk shadow stay visible smoothly
-          frame.style.clipPath = `inset(-80px -80px -80px ${halfBookW}px)`;
-        }
-      }
+    if (wrapper) {
+      const targetX = mobile ? 0 : (-(pw + 11) / 2) * (1 - clamped);
+      gsap.set(wrapper, { x: targetX });
+    }
 
-      if (cover) {
-        if (clamped >= 0.998) {
-          cover.style.visibility = 'hidden';
-          cover.style.pointerEvents = 'none';
-        } else {
-          cover.style.visibility = 'visible';
-          cover.style.pointerEvents = '';
-          const angle = isMobile ? -clamped * 115 : -clamped * 180;
-          gsap.set(cover, { rotateY: angle });
-        }
+    // Expand desk shadow leftward from the spine in smooth lockstep with the opening cover (> 90deg)
+    if (deskShadow) {
+      if (mobile) {
+        gsap.set(deskShadow, { scaleX: 1, z: -6 });
+      } else {
+        const leftReach = Math.max(0, -Math.cos(clamped * Math.PI));
+        gsap.set(deskShadow, { scaleX: 0.5 + 0.5 * leftReach, z: -6 });
       }
+    }
 
-      if (mobileBack && isMobile) {
-        const fadeOut =
-          clamped <= 0.72 ? 1 : Math.max(0, 1 - (clamped - 0.72) / 0.28);
-        mobileBack.style.opacity = fadeOut.toFixed(3);
+    // Keep left half unclipped across the 0.992..1.0 overlap window so cover & spread hand off cleanly
+    if (frame) {
+      if (mobile || phase === 'open' || clamped >= 0.992) {
+        frame.style.clipPath = 'none';
+      } else {
+        frame.style.clipPath = `inset(-80px -120px -180px ${hbw}px)`;
       }
+    }
 
-      if (rightShadow) {
-        const shadowOpacity = Math.max(0, 0.34 * (1 - clamped / 0.45));
-        rightShadow.style.opacity = shadowOpacity.toFixed(3);
+    if (cover) {
+      if (phase === 'open') {
+        cover.style.visibility = 'hidden';
+        cover.style.pointerEvents = 'none';
+        gsap.set(cover, { rotateY: mobile ? -115 : -180, z: 8 });
+      } else {
+        cover.style.visibility = 'visible';
+        cover.style.pointerEvents = phase === 'closed' ? '' : 'none';
+        gsap.set(cover, { rotateY: angle, z: 8 });
       }
-    },
-    [halfBookW, isMobile, pageW]
-  );
+    }
+
+    if (coverFront) {
+      coverFront.style.visibility = pastNinety ? 'hidden' : 'visible';
+    }
+
+    if (coverBack && !mobile) {
+      coverBack.style.opacity = pastNinety ? '1' : '0';
+    }
+
+    if (mobileBack && mobile) {
+      const fadeOut =
+        clamped <= 0.72 ? 1 : Math.max(0, 1 - (clamped - 0.72) / 0.28);
+      mobileBack.style.opacity = pastNinety ? fadeOut.toFixed(3) : '0';
+    }
+
+    if (rightShadow) {
+      const shadowOpacity = mobile
+        ? Math.max(0, 0.82 * Math.pow(Math.max(0, 1 - clamped / 0.78), 1.15))
+        : Math.max(0, 0.34 * (1 - clamped / 0.45));
+      rightShadow.style.opacity = shadowOpacity.toFixed(3);
+    }
+  }, []);
 
   // Sync GSAP 3D book cover animation with bookPhase
   useEffect(() => {
@@ -205,20 +355,20 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
 
     if (bookPhase === 'closed') {
       coverProgressRef.current.p = 0;
-      applyCoverPose(0);
+      applyCoverPose(0, 'closed');
       return;
     }
 
     if (bookPhase === 'open') {
       coverProgressRef.current.p = 1;
-      applyCoverPose(1);
+      applyCoverPose(1, 'open');
       return;
     }
 
     if (prefersReducedMotion()) {
       const targetP = bookPhase === 'opening' ? 1 : 0;
       coverProgressRef.current.p = targetP;
-      applyCoverPose(targetP);
+      applyCoverPose(targetP, bookPhase === 'opening' ? 'open' : 'closed');
       if (bookPhase === 'opening') onOpenComplete();
       else onCloseComplete();
       return;
@@ -226,14 +376,14 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
 
     if (bookPhase === 'opening') {
       coverProgressRef.current.p = 0;
-      applyCoverPose(0);
+      applyCoverPose(0, 'opening');
       coverTweenRef.current = gsap.to(coverProgressRef.current, {
         p: 1,
         duration: isMobile ? 0.92 : 1.18,
         ease: 'power2.inOut',
-        onUpdate: () => applyCoverPose(coverProgressRef.current.p),
+        onUpdate: () => applyCoverPose(coverProgressRef.current.p, 'opening'),
         onComplete: () => {
-          applyCoverPose(1);
+          applyCoverPose(1, 'open');
           onOpenComplete();
         },
       });
@@ -242,14 +392,14 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
       updateCurl(IDLE_CURL);
 
       coverProgressRef.current.p = 1;
-      applyCoverPose(1);
+      applyCoverPose(1, 'closing');
       coverTweenRef.current = gsap.to(coverProgressRef.current, {
         p: 0,
         duration: isMobile ? 0.88 : 1.12,
         ease: 'power2.inOut',
-        onUpdate: () => applyCoverPose(coverProgressRef.current.p),
+        onUpdate: () => applyCoverPose(coverProgressRef.current.p, 'closing'),
         onComplete: () => {
-          applyCoverPose(0);
+          applyCoverPose(0, 'closed');
           onCloseComplete();
         },
       });
@@ -264,28 +414,195 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
   ]);
 
   useEffect(() => {
-    if (bookPhase === 'closed') applyCoverPose(0);
-    else if (bookPhase === 'open') applyCoverPose(1);
-  }, [applyCoverPose, bookPhase, pageW, pageH]);
+    if (bookPhase === 'closed') applyCoverPose(0, 'closed');
+    else if (bookPhase === 'open') applyCoverPose(1, 'open');
+    else applyCoverPose(coverProgressRef.current.p, bookPhase);
+  }, [applyCoverPose, bookPhase, pageW, pageH, isMobile]);
 
   const cancelCurlTween = useCallback(() => {
     curlTweenRef.current?.kill();
     curlTweenRef.current = null;
   }, []);
 
+  const renderRibbon = useCallback(() => {
+    const sim = ribbonSimRef.current;
+    const speedSway = Math.max(-12, Math.min(12, sim.vel * 0.025));
+    const sway = Math.max(-16, Math.min(16, sim.dragSway + speedSway));
+    const { d, sheenOpacity } = buildRibbonPath(sim.pull, sway);
+
+    if (ribbonPathRef.current) {
+      ribbonPathRef.current.setAttribute('d', d);
+    }
+    if (ribbonSheenPathRef.current) {
+      ribbonSheenPathRef.current.setAttribute('d', d);
+      ribbonSheenPathRef.current.style.opacity = sheenOpacity.toFixed(3);
+    }
+  }, []);
+
+  const stopRibbonSpring = useCallback(() => {
+    const sim = ribbonSimRef.current;
+    if (sim.rafId !== null) {
+      cancelAnimationFrame(sim.rafId);
+      sim.rafId = null;
+    }
+  }, []);
+
+  const releaseRibbonSpring = useCallback(
+    (initialVel = 0) => {
+      stopRibbonSpring();
+      const sim = ribbonSimRef.current;
+
+      if (prefersReducedMotion()) {
+        sim.pull = 0;
+        sim.vel = 0;
+        sim.dragSway = 0;
+        sim.dragSwayVel = 0;
+        renderRibbon();
+        return;
+      }
+
+      sim.vel = initialVel;
+      sim.dragSwayVel = 0;
+      sim.lastTime = performance.now();
+
+      const step = (now: number) => {
+        const dt = Math.min(0.032, (now - sim.lastTime) / 1000);
+        sim.lastTime = now;
+
+        const c = 2 * RIBBON_ZETA * Math.sqrt(RIBBON_K);
+        const accel = -RIBBON_K * sim.pull - c * sim.vel;
+        sim.vel += accel * dt;
+        sim.pull += sim.vel * dt;
+
+        const swayAccel =
+          -RIBBON_K * 0.85 * sim.dragSway - c * 1.15 * sim.dragSwayVel;
+        sim.dragSwayVel += swayAccel * dt;
+        sim.dragSway += sim.dragSwayVel * dt;
+
+        if (
+          Math.abs(sim.pull) < 0.1 &&
+          Math.abs(sim.vel) < 1 &&
+          Math.abs(sim.dragSway) < 0.1 &&
+          Math.abs(sim.dragSwayVel) < 1
+        ) {
+          sim.pull = 0;
+          sim.vel = 0;
+          sim.dragSway = 0;
+          sim.dragSwayVel = 0;
+          sim.rafId = null;
+          renderRibbon();
+          return;
+        }
+
+        renderRibbon();
+        sim.rafId = requestAnimationFrame(step);
+      };
+
+      sim.rafId = requestAnimationFrame(step);
+    },
+    [renderRibbon, stopRibbonSpring]
+  );
+
+  const handleRibbonPointerDown = (
+    e: React.PointerEvent<HTMLButtonElement>
+  ) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    stopRibbonSpring();
+
+    const sim = ribbonSimRef.current;
+    // Allow re-grabbing mid-bounce seamlessly with zero jump
+    sim.pointerId = e.pointerId;
+    sim.startClientY = e.clientY - ribbonInverse(sim.pull);
+    sim.startClientX =
+      e.clientX -
+      65 * Math.atanh(Math.max(-0.99, Math.min(0.99, sim.dragSway / 14)));
+    sim.vel = 0;
+    sim.dragSwayVel = 0;
+    sim.hasMoved = false;
+    setIsTuggingRibbon(true);
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignore synthetic events
+    }
+  };
+
+  const handleRibbonPointerMove = (
+    e: React.PointerEvent<HTMLButtonElement>
+  ) => {
+    const sim = ribbonSimRef.current;
+    if (sim.pointerId !== e.pointerId) return;
+
+    const dx = e.clientX - sim.startClientX;
+    const dy = e.clientY - sim.startClientY;
+    if (Math.hypot(dx, dy) > 4) {
+      sim.hasMoved = true;
+    }
+
+    sim.pull = ribbonRubber(dy);
+    sim.dragSway = 14 * Math.tanh(dx / 65);
+    sim.vel = 0;
+    renderRibbon();
+  };
+
+  const handleRibbonPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const sim = ribbonSimRef.current;
+    if (sim.pointerId !== e.pointerId) return;
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {
+      // Ignore release errors
+    }
+    sim.pointerId = null;
+    setIsTuggingRibbon(false);
+
+    if (!sim.hasMoved && Math.abs(sim.pull) < 2) {
+      // Quick tap / click gives a playful mini boing
+      sim.pull = 22;
+      renderRibbon();
+      releaseRibbonSpring(0);
+      return;
+    }
+
+    releaseRibbonSpring(0);
+  };
+
+  const handleRibbonKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      stopRibbonSpring();
+      ribbonSimRef.current.pull = 26;
+      renderRibbon();
+      releaseRibbonSpring(0);
+    }
+  };
+
   useEffect(() => {
     const handleWindowBlur = () => {
       cancelCurlTween();
       dragInfoRef.current.pointerId = null;
       updateCurl(IDLE_CURL);
+
+      if (ribbonSimRef.current.pointerId !== null) {
+        ribbonSimRef.current.pointerId = null;
+        setIsTuggingRibbon(false);
+        releaseRibbonSpring(0);
+      }
     };
     window.addEventListener('blur', handleWindowBlur);
     return () => {
       window.removeEventListener('blur', handleWindowBlur);
       cancelCurlTween();
       coverTweenRef.current?.kill();
+      stopRibbonSpring();
     };
-  }, [cancelCurlTween, updateCurl]);
+  }, [cancelCurlTween, releaseRibbonSpring, stopRibbonSpring, updateCurl]);
 
   useEffect(() => {
     if (curlRef.current.mode === 'hover') {
@@ -318,6 +635,14 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
     currentIndex < spreads.length - 1
       ? spreads[currentIndex + 1]
       : upcomingBlankSpread;
+
+  const isSpreadContinuation = (
+    idx: number,
+    target?: JournalSpread | null
+  ): boolean =>
+    Boolean(target && idx > 0 && spreads[idx - 1]?.date === target.date);
+
+  const isCurrentContinuation = isSpreadContinuation(currentIndex, currentSpread);
 
   const mobileNextTarget =
     mobileSide === 'left'
@@ -400,7 +725,11 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
   );
 
   const triggerProgrammaticTurn = useCallback(
-    (direction: TurnDirection, corner: CornerAnchor = 'bottom') => {
+    (
+      direction: TurnDirection,
+      corner: CornerAnchor = 'bottom',
+      durationSec = 1.05
+    ) => {
       if (bookPhase !== 'open') return;
       if (isVoiceBusy) return;
       if (direction === 'prev' && !canTurnPrev) return;
@@ -416,10 +745,18 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
             };
       const target = getTargetPoint(direction, corner, pageW, pageH, isMobile);
 
-      animateCurlTo(direction, corner, startPt, target, 1.05, true, () => {
-        updateCurl(IDLE_CURL);
-        commitTurnOrWelcome(direction);
-      });
+      animateCurlTo(
+        direction,
+        corner,
+        startPt,
+        target,
+        durationSec,
+        true,
+        () => {
+          updateCurl(IDLE_CURL);
+          commitTurnOrWelcome(direction);
+        }
+      );
     },
     [
       animateCurlTo,
@@ -431,6 +768,77 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
       pageH,
       pageW,
       updateCurl,
+    ]
+  );
+
+  const handlePageOverflow = useCallback(
+    (
+      side: 'left' | 'right',
+      fitText: string,
+      overflowText: string,
+      moveFocus: boolean,
+      caretOffset: number
+    ) => {
+      if (bookPhase !== 'open' || curlRef.current.mode === 'animating') {
+        return;
+      }
+
+      if (side === 'left') {
+        const existingRight = currentSpread.rightBody ?? '';
+        const mergedRight =
+          overflowText && existingRight
+            ? `${overflowText}${
+                /[\s\n]$/.test(overflowText) || /^[\s\n]/.test(existingRight)
+                  ? ''
+                  : '\n'
+              }${existingRight}`
+            : overflowText || existingRight;
+
+        onUpdateSpread(currentIndex, {
+          leftBody: fitText,
+          rightBody: mergedRight,
+        });
+
+        if (moveFocus) {
+          onRequestFocus?.({
+            spreadIndex: currentIndex,
+            side: 'right',
+            caretOffset,
+          });
+          if (isMobile && mobileSide === 'left') {
+            triggerProgrammaticTurn('next', 'bottom', 0.48);
+          }
+        }
+        return;
+      }
+
+      const nextIdx = onStageContinuationSpread
+        ? onStageContinuationSpread(currentIndex, fitText, overflowText)
+        : currentIndex + 1;
+
+      if (!onStageContinuationSpread) {
+        onUpdateSpread(currentIndex, { rightBody: fitText });
+      }
+
+      if (moveFocus) {
+        onRequestFocus?.({
+          spreadIndex: nextIdx,
+          side: 'left',
+          caretOffset,
+        });
+        triggerProgrammaticTurn('next', 'bottom', 0.48);
+      }
+    },
+    [
+      bookPhase,
+      currentIndex,
+      currentSpread.rightBody,
+      isMobile,
+      mobileSide,
+      onRequestFocus,
+      onStageContinuationSpread,
+      onUpdateSpread,
+      triggerProgrammaticTurn,
     ]
   );
 
@@ -559,6 +967,13 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
   ) => {
     if (bookPhase !== 'open') return;
     if (isVoiceBusy) return;
+    if (e.pointerType === 'pen') return;
+    if (
+      e.pointerType === 'touch' &&
+      performance.now() - lastPenActivityRef.current < 450
+    ) {
+      return;
+    }
     if (e.button !== 0) return;
     if (direction === 'prev' && !canTurnPrev) return;
     if (curlRef.current.mode === 'animating') return;
@@ -788,13 +1203,30 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
           willChange: 'transform',
         }}
       >
-        {/* ================= UNIFIED HARDBOUND FRAME + OPEN SPREAD ================= */}
+        {/* Flat Desk Drop Shadow expanding smoothly leftward in sync with the opening cover */}
         <div
-          ref={frameRef}
-          className="relative cover-cloth book-frame-shadow rounded-xl p-[11px]"
+          ref={deskShadowRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 left-0 rounded-xl book-frame-shadow"
           style={{
             width: `${stageW + 22}px`,
             height: `${fullBookH}px`,
+            transformOrigin: 'right center',
+            transform: 'translateZ(-6px)',
+            willChange: 'transform',
+            zIndex: 0,
+          }}
+        />
+
+        {/* ================= UNIFIED HARDBOUND FRAME + OPEN SPREAD ================= */}
+        <div
+          ref={frameRef}
+          className="relative z-[1] cover-cloth book-frame-edge rounded-xl p-[11px]"
+          style={{
+            width: `${stageW + 22}px`,
+            height: `${fullBookH}px`,
+            transform: bookPhase === 'open' ? undefined : 'translateZ(-2px)',
+            transformStyle: 'flat',
           }}
         >
           {/* Layered paper stack thickness along outer edges */}
@@ -809,29 +1241,87 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
             className="pointer-events-none absolute top-[14px] bottom-[14px] right-[6px] w-[5px] rounded-r-sm paper-stack-right"
           />
 
-          {/* Woven burgundy bookmark ribbon */}
-          <div
-            aria-hidden="true"
-            className={`pointer-events-none absolute -bottom-7 ${
+          {/* Interactive woven burgundy bookmark ribbon (progressive tension + damped spring boing) */}
+          <button
+            type="button"
+            aria-label="Bookmark ribbon"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={handleRibbonPointerDown}
+            onPointerMove={handleRibbonPointerMove}
+            onPointerUp={handleRibbonPointerUp}
+            onPointerCancel={handleRibbonPointerUp}
+            onKeyDown={handleRibbonKeyDown}
+            className={`group absolute ${
               isMobile ? 'right-10' : 'right-14'
-            } w-4 h-9 z-0`}
+            } w-4 h-9 z-[1] appearance-none bg-transparent border-0 p-0 touch-none select-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#deb488] rounded-b ${
+              isTuggingRibbon ? 'cursor-grabbing' : 'cursor-grab'
+            }`}
             style={{
-              background:
-                'linear-gradient(90deg, #6e2226 0%, #8f3136 50%, #58191c 100%)',
-              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%)',
-              boxShadow: '1px 4px 8px rgba(30, 20, 14, 0.28)',
+              top: 'calc(100% - 8px)',
+              filter: 'drop-shadow(1px 4px 6px rgba(24, 16, 11, 0.34))',
             }}
-          />
+          >
+            {/* Generous invisible touch/grab zone strictly below the book bottom edge */}
+            <span
+              aria-hidden="true"
+              className="absolute -inset-x-2.5 top-[8px] -bottom-3"
+            />
+            <svg
+              width={RIBBON_W}
+              height={RIBBON_BASE_LENGTH}
+              viewBox={`0 0 ${RIBBON_W} ${RIBBON_BASE_LENGTH}`}
+              overflow="visible"
+              aria-hidden="true"
+              className="pointer-events-none block overflow-visible"
+            >
+              <defs>
+                <linearGradient
+                  id="bookmark-silk-grad"
+                  x1="0%"
+                  y1="0%"
+                  x2="100%"
+                  y2="0%"
+                >
+                  <stop offset="0%" stopColor="#6e2226" />
+                  <stop offset="48%" stopColor="#8f3136" />
+                  <stop offset="100%" stopColor="#58191c" />
+                </linearGradient>
+                <linearGradient
+                  id="bookmark-sheen-grad"
+                  x1="0%"
+                  y1="0%"
+                  x2="100%"
+                  y2="0%"
+                >
+                  <stop offset="18%" stopColor="rgba(255, 232, 226, 0)" />
+                  <stop offset="50%" stopColor="rgba(255, 232, 226, 0.45)" />
+                  <stop offset="82%" stopColor="rgba(255, 232, 226, 0)" />
+                </linearGradient>
+              </defs>
+              <path
+                ref={ribbonPathRef}
+                d={INITIAL_RIBBON_PATH}
+                fill="url(#bookmark-silk-grad)"
+              />
+              <path
+                ref={ribbonSheenPathRef}
+                d={INITIAL_RIBBON_PATH}
+                fill="url(#bookmark-sheen-grad)"
+                style={{ opacity: 0 }}
+              />
+            </svg>
+          </button>
 
           {/* STAGE CONTAINER */}
           <div
             ref={spreadRef}
-            className={`relative bg-[#efe8da] dark:bg-[#191614] rounded-[3px] shadow-inner ${
+            className={`relative z-[2] bg-[#efe8da] dark:bg-[#191614] rounded-[3px] shadow-inner ${
               isMobile ? 'overflow-hidden' : ''
             }`}
             style={{
               width: `${stageW}px`,
               height: `${pageH}px`,
+              visibility: bookPhase === 'closed' ? 'hidden' : 'visible',
             }}
           >
             {isMobile ? (
@@ -864,6 +1354,7 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                     pageW={pageW}
                     pageH={pageH}
                     isMobile={true}
+                    isContinuation={isCurrentContinuation}
                     interactive={true}
                     locked={isLocked}
                     onUpdateSpread={(patch) =>
@@ -882,6 +1373,20 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                     canTurnNext={canTurnNext}
                     voiceControl={voiceControl}
                     onMenuOpenChange={setIsMenuOpen}
+                    inkConfig={inkConfig}
+                    inkToolbarOpen={inkToolbarOpen}
+                    onToggleInkToolbar={onToggleInkToolbar}
+                    onCommitInk={(pageSide, nextInk) =>
+                      onCommitInk?.(currentIndex, pageSide, nextInk)
+                    }
+                    onPenActivity={handlePenActivity}
+                    onStylusActive={(pageSide) =>
+                      onStylusActive?.(currentIndex, pageSide)
+                    }
+                    onInkCapacityWarning={onInkCapacityWarning}
+                    onPageOverflow={handlePageOverflow}
+                    focusRequest={focusRequest}
+                    onClearFocusRequest={onClearFocusRequest}
                   />
                 )}
               </div>
@@ -906,6 +1411,7 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                       spreadIndex={currentIndex}
                       pageW={pageW}
                       pageH={pageH}
+                      isContinuation={isCurrentContinuation}
                       interactive={true}
                       locked={isLocked}
                       onUpdateSpread={(patch) =>
@@ -917,6 +1423,20 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                       canTurnPrev={canTurnPrev}
                       canTurnNext={canTurnNext}
                       voiceControl={voiceControl}
+                      inkConfig={inkConfig}
+                      inkToolbarOpen={inkToolbarOpen}
+                      onToggleInkToolbar={onToggleInkToolbar}
+                      onCommitInk={(pageSide, nextInk) =>
+                        onCommitInk?.(currentIndex, pageSide, nextInk)
+                      }
+                      onPenActivity={handlePenActivity}
+                      onStylusActive={(pageSide) =>
+                        onStylusActive?.(currentIndex, pageSide)
+                      }
+                      onInkCapacityWarning={onInkCapacityWarning}
+                      onPageOverflow={handlePageOverflow}
+                      focusRequest={focusRequest}
+                      onClearFocusRequest={onClearFocusRequest}
                     />
                   )}
                 </div>
@@ -970,22 +1490,39 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                       canTurnNext={canTurnNext}
                       voiceControl={voiceControl}
                       onMenuOpenChange={setIsMenuOpen}
+                      inkConfig={inkConfig}
+                      inkToolbarOpen={inkToolbarOpen}
+                      onToggleInkToolbar={onToggleInkToolbar}
+                      onCommitInk={(pageSide, nextInk) =>
+                        onCommitInk?.(currentIndex, pageSide, nextInk)
+                      }
+                      onPenActivity={handlePenActivity}
+                      onStylusActive={(pageSide) =>
+                        onStylusActive?.(currentIndex, pageSide)
+                      }
+                      onInkCapacityWarning={onInkCapacityWarning}
+                      onPageOverflow={handlePageOverflow}
+                      focusRequest={focusRequest}
+                      onClearFocusRequest={onClearFocusRequest}
                     />
                   )}
                 </div>
               </>
             )}
 
-            {/* Cast interior shadow on Right Page while cover lifts */}
-            {!isMobile && bookPhase !== 'open' ? (
+            {/* Cast interior shadow on underlying page while cover lifts */}
+            {bookPhase !== 'open' ? (
               <div
                 ref={rightShadowRef}
                 aria-hidden="true"
-                className="pointer-events-none absolute top-0 right-0 z-20 bg-[#1a130d] dark:bg-black"
+                className="pointer-events-none absolute top-0 z-20 bg-[#1a130d] dark:bg-black"
                 style={{
+                  left: isMobile ? '0px' : undefined,
+                  right: isMobile ? undefined : '0px',
                   width: `${pageW}px`,
                   height: `${pageH}px`,
-                  opacity: bookPhase === 'closed' ? 0.34 : 0,
+                  opacity:
+                    bookPhase === 'closed' ? (isMobile ? 0.82 : 0.34) : 0,
                 }}
               />
             ) : null}
@@ -1029,6 +1566,16 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                   pageW={pageW}
                   pageH={pageH}
                   isMobile={isMobile}
+                  isContinuation={
+                    showWelcome
+                      ? false
+                      : isMobile
+                        ? isSpreadContinuation(
+                            mobileNextTarget.index,
+                            mobileNextTarget.spread
+                          )
+                        : isSpreadContinuation(currentIndex + 1, nextSpread)
+                  }
                   isSignedIn={isSignedIn}
                   interactive={false}
                 />
@@ -1065,6 +1612,14 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                   pageW={pageW}
                   pageH={pageH}
                   isMobile={isMobile}
+                  isContinuation={
+                    isMobile && mobilePrevTarget
+                      ? isSpreadContinuation(
+                          mobilePrevTarget.index,
+                          mobilePrevTarget.spread
+                        )
+                      : isSpreadContinuation(currentIndex - 1, prevSpread)
+                  }
                   isSignedIn={isSignedIn}
                   interactive={false}
                 />
@@ -1139,6 +1694,16 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                       pageW={pageW}
                       pageH={pageH}
                       isMobile={isMobile}
+                      isContinuation={
+                        showWelcome
+                          ? false
+                          : isMobile
+                            ? isSpreadContinuation(
+                                mobileNextTarget.index,
+                                mobileNextTarget.spread
+                              )
+                            : isSpreadContinuation(currentIndex + 1, nextSpread)
+                      }
                       isSignedIn={isSignedIn}
                       interactive={false}
                     />
@@ -1150,6 +1715,10 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                       pageW={pageW}
                       pageH={pageH}
                       isMobile={isMobile}
+                      isContinuation={isSpreadContinuation(
+                        mobilePrevTarget.index,
+                        mobilePrevTarget.spread
+                      )}
                       isSignedIn={isSignedIn}
                       interactive={false}
                     />
@@ -1160,6 +1729,10 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                       spreadIndex={currentIndex - 1}
                       pageW={pageW}
                       pageH={pageH}
+                      isContinuation={isSpreadContinuation(
+                        currentIndex - 1,
+                        prevSpread
+                      )}
                       isSignedIn={isSignedIn}
                       interactive={false}
                     />
@@ -1205,7 +1778,9 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
             ) : null}
 
             {/* INTERACTIVE CORNER & EDGE DRAG ZONES (z-40) */}
-            {isOpenInteractive && !isMenuOpen ? (
+            {isOpenInteractive &&
+            !isMenuOpen &&
+            !(inkConfig?.drawArmed && inkConfig?.allowTouchDraw) ? (
               <>
                 <div
                   role="button"
@@ -1221,7 +1796,11 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                   style={{
                     top: showWelcome ? '76px' : isMobile ? '168px' : '110px',
                     bottom: '92px',
-                    width: isMobile ? '34px' : '40px',
+                    width: inkToolbarOpen
+                      ? '16px'
+                      : isMobile
+                        ? '34px'
+                        : '40px',
                   }}
                 />
 
@@ -1239,8 +1818,16 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                   onPointerCancel={handleZonePointerUp}
                   className="absolute right-0 bottom-0 z-40 cursor-grab active:cursor-grabbing touch-none"
                   style={{
-                    width: isMobile ? '84px' : '104px',
-                    height: isMobile ? '78px' : '92px',
+                    width: inkToolbarOpen
+                      ? '46px'
+                      : isMobile
+                        ? '84px'
+                        : '104px',
+                    height: inkToolbarOpen
+                      ? '46px'
+                      : isMobile
+                        ? '78px'
+                        : '92px',
                   }}
                 />
 
@@ -1260,7 +1847,11 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                       style={{
                         top: '132px',
                         bottom: '92px',
-                        width: isMobile ? '34px' : '40px',
+                        width: inkToolbarOpen
+                          ? '16px'
+                          : isMobile
+                            ? '34px'
+                            : '40px',
                       }}
                     />
                     <div
@@ -1277,8 +1868,16 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                       onPointerCancel={handleZonePointerUp}
                       className="absolute left-0 bottom-0 z-40 cursor-grab active:cursor-grabbing touch-none"
                       style={{
-                        width: isMobile ? '84px' : '104px',
-                        height: isMobile ? '78px' : '92px',
+                        width: inkToolbarOpen
+                          ? '46px'
+                          : isMobile
+                            ? '84px'
+                            : '104px',
+                        height: inkToolbarOpen
+                          ? '46px'
+                          : isMobile
+                            ? '78px'
+                            : '92px',
                       }}
                     />
                   </>
@@ -1304,18 +1903,20 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
         >
           {/* Front exterior cover */}
           <button
+            ref={coverFrontRef}
             type="button"
             disabled={bookPhase !== 'closed'}
             onClick={bookPhase === 'closed' ? onOpenBook : undefined}
             aria-label="Open journal"
-            className={`group absolute inset-0 cover-cloth book-cover-shadow rounded-l-[4px] rounded-r-xl overflow-hidden flex flex-col justify-between ${
+            className={`group absolute inset-0 cover-cloth book-cover-edge rounded-l-[4px] rounded-r-xl overflow-hidden flex flex-col justify-between opacity-100 ${
               isMobile ? 'p-8' : 'p-11'
             } text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c6b48] ${
               bookPhase === 'closed' ? 'cursor-pointer' : 'pointer-events-none'
             }`}
             style={{
               backfaceVisibility: 'hidden',
-              transform: 'rotateY(0deg) translateZ(1px)',
+              WebkitBackfaceVisibility: 'hidden',
+              transform: 'rotateY(0deg) translateZ(2px)',
             }}
           >
             {/* Spine hinge groove */}
@@ -1395,19 +1996,22 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 cover-cloth rounded-r-xl rounded-l-none p-[11px] pl-0"
               style={{
-                backfaceVisibility: 'hidden',
-                transform: 'rotateY(180deg) translateZ(1px)',
+                backfaceVisibility: 'visible',
+                WebkitBackfaceVisibility: 'visible',
+                transform: 'rotateY(180deg) translateZ(2px)',
               }}
             >
               <div className="w-full h-full rounded-r-[3px] mobile-back-paper" />
             </div>
           ) : (
             <div
+              ref={coverBackRef}
               aria-hidden="true"
-              className="pointer-events-none absolute inset-0 cover-cloth book-frame-shadow rounded-l-xl rounded-r-none"
+              className="pointer-events-none absolute inset-0 cover-cloth book-frame-edge rounded-l-xl rounded-r-none"
               style={{
-                backfaceVisibility: 'hidden',
-                transform: 'rotateY(180deg) translateZ(1px)',
+                backfaceVisibility: 'visible',
+                WebkitBackfaceVisibility: 'visible',
+                transform: 'rotateY(180deg) translateZ(2px)',
                 paddingTop: '11px',
                 paddingBottom: '11px',
                 paddingLeft: '11px',
@@ -1433,6 +2037,7 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
                     spreadIndex={currentIndex}
                     pageW={pageW}
                     pageH={pageH}
+                    isContinuation={isCurrentContinuation}
                     interactive={false}
                     isSignedIn={isSignedIn}
                     showEmptyPlaceholders={true}

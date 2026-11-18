@@ -13,6 +13,8 @@ export const DEFAULT_SPREADS: JournalSpread[] = [
       'Picked up a fine nib on the walk back from the station and spent twenty quiet minutes watching rain collect along the sill.\n\nFunny how much slower thoughts move without a bright screen sitting beside the teacup. Half the things that felt urgent on Tuesday turned out to be noise once I wrote them in plain sentences.\n\nBefore Friday:\n- Walk before checking messages\n- Finish the essays on light and proportion\n- Call Sam before the weekend',
     rightBody:
       'Evening:\n\nRoasted squash with thyme and garlic while listening to old Bill Evans records. Kept only the corner lamp lit.\n\nNote for the studio work—let one physical object carry the room and leave the rest open.',
+    leftInk: '',
+    rightInk: '',
     updatedAt: 1794518400000,
   },
   {
@@ -25,6 +27,8 @@ export const DEFAULT_SPREADS: JournalSpread[] = [
       'Woke early before the street stirred. Crisp air through the hallway, pale silver sky behind the rooftops.\n\nSpent an hour sketching margins and proportions on scrap paper—a pencil still solves things faster than sliding boxes around with a trackpad.\n\nSimplicity is rarely what you remove first; it is what stays honest after the extra ornament drops away.',
     rightBody:
       'Afternoon walk across the park. The sycamore leaves are almost completely down now, leaving dark ink-like branches against the sky.\n\nTomorrow:\nKeep the morning unscheduled until ten-thirty so the day has somewhere quiet to start.',
+    leftInk: '',
+    rightInk: '',
     updatedAt: 1794604800000,
   },
   {
@@ -37,6 +41,8 @@ export const DEFAULT_SPREADS: JournalSpread[] = [
       'Slow Saturday. Made pour-over at eleven and cleared off the desk so only the notebook and a pen were sitting out.\n\nBooks to look for next week:\n- The Poetics of Space\n- In Praise of Shadows\n\nWant to spend a few hours this afternoon sorting the autumn film rolls and writing down the ones worth printing.',
     rightBody:
       'Afternoon thoughts:\n\nNotice how quickly a week disappears when every hour gets booked back-to-back. Keeping one blank afternoon feels less like doing nothing and more like catching up with yourself.\n\nDinner plan: pasta with lemon, capers, and toasted breadcrumbs.',
+    leftInk: '',
+    rightInk: '',
     updatedAt: 1794691200000,
   },
   {
@@ -47,13 +53,17 @@ export const DEFAULT_SPREADS: JournalSpread[] = [
     paperStyle: 'dotted',
     leftBody: '',
     rightBody: '',
+    leftInk: '',
+    rightInk: '',
     updatedAt: 1794691201000,
   },
 ];
 
 export function sortSpreadsChronologically(spreads: JournalSpread[]): JournalSpread[] {
   return [...spreads].sort(
-    (a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)
+    (a, b) =>
+      a.date.localeCompare(b.date) ||
+      a.id.localeCompare(b.id, undefined, { numeric: true })
   );
 }
 
@@ -65,6 +75,8 @@ export function isUntouchedDefaultSpread(spread: JournalSpread): boolean {
     sample.contextNote === spread.contextNote &&
     sample.leftBody === spread.leftBody &&
     sample.rightBody === spread.rightBody &&
+    sample.leftInk === spread.leftInk &&
+    sample.rightInk === spread.rightInk &&
     sample.inkColor === spread.inkColor &&
     sample.paperStyle === spread.paperStyle
   );
@@ -148,6 +160,8 @@ export function createBlankTodaySpread(): JournalSpread {
     contextNote: '',
     leftBody: '',
     rightBody: '',
+    leftInk: '',
+    rightInk: '',
     inkColor: 'charcoal',
     paperStyle: 'ruled',
     updatedAt: Date.now(),

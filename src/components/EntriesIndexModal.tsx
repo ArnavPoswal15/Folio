@@ -385,7 +385,10 @@ export const EntriesIndexModal: React.FC<EntriesIndexModalProps> = ({
                       </div>
                     ) : null}
                     <p className="mt-1 pl-6 font-hand ink-prose text-lg text-[#5e4f40] dark:text-[#bfb19e] line-clamp-1">
-                      {snippet || 'Blank sheet'}
+                      {snippet ||
+                        (spread.leftInk || spread.rightInk
+                          ? 'Handwritten ink notes'
+                          : 'Blank sheet')}
                     </p>
                   </button>
 

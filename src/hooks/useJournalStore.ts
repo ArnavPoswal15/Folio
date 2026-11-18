@@ -43,6 +43,14 @@ type JournalAction =
   | { type: 'TURN_PREV' }
   | { type: 'TURN_NEXT'; createdSpread?: JournalSpread }
   | { type: 'CREATE_SPREAD'; createdSpread: JournalSpread }
+  | {
+      type: 'STAGE_CONTINUATION';
+      afterSpreadId: string;
+      rightBodyFit: string;
+      continuationSpread: JournalSpread;
+      isNew: boolean;
+      updatedAt: number;
+    }
   | { type: 'DELETE_SPREAD'; index: number }
   | { type: 'APPLY_CLOUD_SPREADS'; spreads: JournalSpread[]; preserveSpreadId?: string }
   | { type: 'PREPARE_SIGNED_IN'; cachedSpreads: JournalSpread[] }
@@ -118,6 +126,33 @@ function journalReducer(state: JournalState, action: JournalAction): JournalStat
       return {
         spreads: nextSpreads,
         currentIndex: nextIdx !== -1 ? nextIdx : nextSpreads.length - 1,
+      };
+    }
+
+    case 'STAGE_CONTINUATION': {
+      const updated = state.spreads.map((s) =>
+        s.id === action.afterSpreadId
+          ? sanitizeSpreadPayload({
+              ...s,
+              rightBody: action.rightBodyFit,
+              updatedAt: action.updatedAt,
+            })
+          : s.id === action.continuationSpread.id && !action.isNew
+            ? action.continuationSpread
+            : s
+      );
+      const nextSpreads = sortSpreadsChronologically(
+        action.isNew ? [...updated, action.continuationSpread] : updated
+      );
+      const preservedIdx = nextSpreads.findIndex(
+        (s) => s.id === action.afterSpreadId
+      );
+      return {
+        spreads: nextSpreads,
+        currentIndex:
+          preservedIdx !== -1
+            ? preservedIdx
+            : clampIndex(state.currentIndex, nextSpreads.length),
       };
     }
 
@@ -197,6 +232,25 @@ function generateUniqueSpreadId(): string {
   return sanitizeSpreadId(`spread-${Date.now()}-${rand}`);
 }
 
+function generateContinuationSpreadId(
+  parentId: string,
+  existingSpreads: JournalSpread[]
+): string {
+  const existingIds = new Set(existingSpreads.map((s) => s.id));
+  const baseMatch = parentId.match(/^(.*)-c(\d+)$/);
+  const root = baseMatch ? baseMatch[1] : parentId;
+  let seq = baseMatch ? Number(baseMatch[2]) + 1 : 1;
+
+  while (seq < 1000) {
+    const candidate = sanitizeSpreadId(`${root}-c${seq}`);
+    if (!existingIds.has(candidate)) {
+      return candidate;
+    }
+    seq += 1;
+  }
+  return generateUniqueSpreadId();
+}
+
 function toFirestoreSpreadDoc(spread: JournalSpread, uid: string) {
   const clean = sanitizeSpreadPayload(spread);
   return {
@@ -206,6 +260,8 @@ function toFirestoreSpreadDoc(spread: JournalSpread, uid: string) {
     contextNote: clean.contextNote,
     leftBody: clean.leftBody,
     rightBody: clean.rightBody,
+    leftInk: clean.leftInk,
+    rightInk: clean.rightInk,
     inkColor: clean.inkColor,
     paperStyle: clean.paperStyle,
     clientUpdatedAt: clean.updatedAt,
@@ -229,6 +285,8 @@ function fromFirestoreSpreadDoc(
     contextNote: typeof data.contextNote === 'string' ? data.contextNote : '',
     leftBody: typeof data.leftBody === 'string' ? data.leftBody : '',
     rightBody: typeof data.rightBody === 'string' ? data.rightBody : '',
+    leftInk: typeof data.leftInk === 'string' ? data.leftInk : '',
+    rightInk: typeof data.rightInk === 'string' ? data.rightInk : '',
     inkColor:
       data.inkColor === 'midnight' || data.inkColor === 'sepia'
         ? data.inkColor
@@ -601,6 +659,8 @@ export function useJournalStore(user: User | null, authReady: boolean) {
       contextNote: '',
       leftBody: '',
       rightBody: '',
+      leftInk: '',
+      rightInk: '',
       inkColor: currentSpread?.inkColor ?? 'charcoal',
       paperStyle: currentSpread?.paperStyle ?? 'ruled',
       updatedAt: Date.now(),
@@ -671,6 +731,8 @@ export function useJournalStore(user: User | null, authReady: boolean) {
       contextNote: '',
       leftBody: '',
       rightBody: '',
+      leftInk: '',
+      rightInk: '',
       inkColor: current?.inkColor ?? 'charcoal',
       paperStyle: current?.paperStyle ?? 'ruled',
       updatedAt: Date.now(),
@@ -721,6 +783,73 @@ export function useJournalStore(user: User | null, authReady: boolean) {
     []
   );
 
+  const stageContinuationSpread = useCallback(
+    (index: number, rightBodyFit: string, overflowLeftBody: string): number => {
+      const curState = stateRef.current;
+      const idx = clampIndex(index, curState.spreads.length);
+      const current = curState.spreads[idx];
+      if (!current) return idx;
+
+      const now = Date.now();
+      const updatedCurrent = sanitizeSpreadPayload({
+        ...current,
+        rightBody: rightBodyFit,
+        updatedAt: now,
+      });
+
+      const nextExisting = curState.spreads[idx + 1];
+      const reuseSameDateNext = Boolean(
+        nextExisting && nextExisting.date === current.date
+      );
+
+      const existingNextLeft = nextExisting?.leftBody ?? '';
+      const mergedNextLeft =
+        reuseSameDateNext && overflowLeftBody && existingNextLeft
+          ? `${overflowLeftBody}${
+              /[\s\n]$/.test(overflowLeftBody) ||
+              /^[\s\n]/.test(existingNextLeft)
+                ? ''
+                : '\n'
+            }${existingNextLeft}`
+          : overflowLeftBody || existingNextLeft;
+
+      const continuationSpread = reuseSameDateNext
+        ? sanitizeSpreadPayload({
+            ...nextExisting,
+            leftBody: mergedNextLeft,
+            inkColor: current.inkColor,
+            paperStyle: current.paperStyle,
+            updatedAt: now,
+          })
+        : sanitizeSpreadPayload({
+            id: generateContinuationSpreadId(current.id, curState.spreads),
+            date: current.date,
+            contextNote: '',
+            leftBody: overflowLeftBody,
+            rightBody: '',
+            leftInk: '',
+            rightInk: '',
+            inkColor: current.inkColor,
+            paperStyle: current.paperStyle,
+            updatedAt: now,
+          });
+
+      dispatch({
+        type: 'STAGE_CONTINUATION',
+        afterSpreadId: current.id,
+        rightBodyFit,
+        continuationSpread,
+        isNew: !reuseSameDateNext,
+        updatedAt: now,
+      });
+
+      scheduleCloudWrite(updatedCurrent);
+      scheduleCloudWrite(continuationSpread);
+      return idx + 1;
+    },
+    [scheduleCloudWrite]
+  );
+
   return {
     spreads: state.spreads,
     currentIndex: safeIndex,
@@ -735,6 +864,7 @@ export function useJournalStore(user: User | null, authReady: boolean) {
     turnPrev,
     turnNext,
     createSpread,
+    stageContinuationSpread,
     deleteSpread,
   };
 }

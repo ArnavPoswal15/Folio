@@ -1,13 +1,17 @@
 import { Moon, Sun } from 'lucide-react';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccountModal } from './components/AccountModal';
 import { EntriesIndexModal } from './components/EntriesIndexModal';
 import { ExportJournalModal } from './components/ExportJournalModal';
+import { InkToolConfig } from './components/InkCanvasLayer';
+import { InkToolbar } from './components/InkToolbar';
+import { PageFocusRequest } from './components/JournalPageContent';
 import { BookPhase, PageCurlStage } from './components/PageCurlStage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { useJournalStore } from './hooks/useJournalStore';
 import { RecordingTarget, useVoiceRecorder } from './hooks/useVoiceRecorder';
+import { InkPaletteId, InkToolType, InkWidthPreset } from './types/journal';
 import { TurnDirection } from './utils/pageCurlGeometry';
 
 function appendTranscriptToBody(existing: string, transcript: string): string {
@@ -23,16 +27,20 @@ interface ViewportMetrics {
   pageW: number;
   pageH: number;
   isMobile: boolean;
+  isLandscapeMobile: boolean;
 }
 
 function computeViewportMetrics(vw: number, vh: number): ViewportMetrics {
-  const isMobile = vw < 768;
+  const isLandscapeMobile = vw > vh && vh < 520 && vw < 1024;
+  const isMobile = vw < 768 || isLandscapeMobile;
 
   if (isMobile) {
-    const pageW = Math.max(256, Math.min(440, vw - 44));
-    const maxH = Math.max(360, vh - 128);
-    const pageH = Math.min(maxH, Math.round(pageW / 0.67));
-    return { pageW, pageH, isMobile: true };
+    const availW = Math.max(200, vw - 40);
+    const availH = Math.max(220, vh - (isLandscapeMobile ? 84 : 128));
+    const maxPageW = Math.min(440, availW);
+    const pageH = Math.min(availH, Math.round(maxPageW / 0.67));
+    const pageW = Math.max(180, Math.min(maxPageW, Math.round(pageH * 0.67)));
+    return { pageW, pageH, isMobile: true, isLandscapeMobile };
   }
 
   const availW = Math.max(540, vw - 64);
@@ -44,7 +52,7 @@ function computeViewportMetrics(vw: number, vh: number): ViewportMetrics {
   const pageW = Math.max(250, Math.min(480, maxPageWByWidth, maxPageWByHeight));
   const pageH = Math.round(pageW / 0.758);
 
-  return { pageW, pageH, isMobile: false };
+  return { pageW, pageH, isMobile: false, isLandscapeMobile: false };
 }
 
 interface ErrorBoundaryState {
@@ -112,6 +120,7 @@ function JournalWorkspace() {
     turnPrev,
     turnNext,
     createSpread,
+    stageContinuationSpread,
     deleteSpread,
   } = useJournalStore(user, authReady);
 
@@ -121,6 +130,36 @@ function JournalWorkspace() {
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [mobileSide, setMobileSide] = useState<'left' | 'right'>('left');
   const [welcomeDismissed, setWelcomeDismissed] = useState<boolean>(false);
+
+  // Stylus & Apple Pencil Freeform-style ink state
+  const [inkToolbarOpen, setInkToolbarOpen] = useState(false);
+  const [inkTool, setInkTool] = useState<InkToolType>('fountain');
+  const [inkColor, setInkColor] = useState<InkPaletteId>('charcoal');
+  const [inkWidth, setInkWidth] = useState<InkWidthPreset>(2);
+  const [allowTouchDraw, setAllowTouchDraw] = useState(false);
+  const [activeInkSide, setActiveInkSide] = useState<'left' | 'right'>('left');
+  const [inkCapacityWarning, setInkCapacityWarning] = useState<string | null>(null);
+  const [landscapeHintDismissed, setLandscapeHintDismissed] = useState(false);
+  const undoStacksRef = useRef<Map<string, string[]>>(new Map());
+  const redoStacksRef = useRef<Map<string, string[]>>(new Map());
+  const [, setHistoryTick] = useState(0);
+
+  const [focusRequest, setFocusRequest] = useState<PageFocusRequest | null>(
+    null
+  );
+  const focusNonceRef = useRef(0);
+
+  const handleRequestFocus = useCallback(
+    (req: Omit<PageFocusRequest, 'nonce'>) => {
+      focusNonceRef.current += 1;
+      setFocusRequest({ ...req, nonce: focusNonceRef.current });
+    },
+    []
+  );
+
+  const handleClearFocusRequest = useCallback((nonce: number) => {
+    setFocusRequest((prev) => (prev?.nonce === nonce ? null : prev));
+  }, []);
 
   // Logged-in users go straight into their clean synced journal
   useEffect(() => {
@@ -186,6 +225,7 @@ function JournalWorkspace() {
     if (bookPhase !== 'open') return;
     voiceControl.onCancel();
     void flushPendingSaves();
+    setInkToolbarOpen(false);
     setIndexModalOpen(false);
     setExportModalOpen(false);
     setAccountModalOpen(false);
@@ -203,6 +243,7 @@ function JournalWorkspace() {
   const handleSignOut = useCallback(async () => {
     await flushPendingSaves();
     await signOut();
+    setInkToolbarOpen(false);
     setAccountModalOpen(false);
     setWelcomeDismissed(false);
   }, [flushPendingSaves, signOut]);
@@ -250,7 +291,137 @@ function JournalWorkspace() {
     setMobileSide('left');
   }, [createSpread]);
 
-  const { pageW, pageH, isMobile } = metrics;
+  const { pageW, pageH, isMobile, isLandscapeMobile } = metrics;
+
+  useEffect(() => {
+    if (!isLandscapeMobile && landscapeHintDismissed) {
+      setLandscapeHintDismissed(false);
+    }
+  }, [isLandscapeMobile, landscapeHintDismissed]);
+
+  const effectiveInkSide: 'left' | 'right' = isMobile
+    ? mobileSide
+    : activeInkSide;
+
+  const inkConfig = useMemo<InkToolConfig>(
+    () => ({
+      tool: inkTool,
+      color: inkColor,
+      width: inkWidth,
+      drawArmed: inkToolbarOpen,
+      allowTouchDraw,
+    }),
+    [allowTouchDraw, inkColor, inkToolbarOpen, inkTool, inkWidth]
+  );
+
+  const handleToggleInkToolbar = useCallback((side: 'left' | 'right') => {
+    setActiveInkSide(side);
+    setInkToolbarOpen((prev) => !prev);
+  }, []);
+
+  const handleStylusActive = useCallback(
+    (_spreadIndex: number, side: 'left' | 'right') => {
+      setActiveInkSide(side);
+    },
+    []
+  );
+
+  const handleCommitInk = useCallback(
+    (spreadIndex: number, side: 'left' | 'right', nextSerialized: string) => {
+      const targetSpread = spreadsRef.current[spreadIndex];
+      if (!targetSpread) return;
+      const field = side === 'left' ? 'leftInk' : 'rightInk';
+      const prevSerialized = targetSpread[field] ?? '';
+      if (prevSerialized === nextSerialized) return;
+
+      const historyKey = `${targetSpread.id}:${side}`;
+      const undoStack = undoStacksRef.current.get(historyKey) ?? [];
+      undoStack.push(prevSerialized);
+      if (undoStack.length > 40) undoStack.shift();
+      undoStacksRef.current.set(historyKey, undoStack);
+      redoStacksRef.current.set(historyKey, []);
+      setHistoryTick((n) => n + 1);
+      setActiveInkSide(side);
+
+      updateSpread(spreadIndex, { [field]: nextSerialized });
+    },
+    [updateSpread]
+  );
+
+  const currentSpreadObj = spreads[currentIndex];
+  const activeHistoryKey = currentSpreadObj
+    ? `${currentSpreadObj.id}:${effectiveInkSide}`
+    : '';
+  const canUndoInk =
+    (undoStacksRef.current.get(activeHistoryKey)?.length ?? 0) > 0;
+  const canRedoInk =
+    (redoStacksRef.current.get(activeHistoryKey)?.length ?? 0) > 0;
+  const hasInkOnActivePage = Boolean(
+    currentSpreadObj &&
+      (effectiveInkSide === 'left'
+        ? currentSpreadObj.leftInk
+        : currentSpreadObj.rightInk)
+  );
+
+  const handleUndoInk = useCallback(() => {
+    const cur = spreadsRef.current[currentIndex];
+    if (!cur) return;
+    const key = `${cur.id}:${effectiveInkSide}`;
+    const undoStack = undoStacksRef.current.get(key);
+    if (!undoStack || undoStack.length === 0) return;
+
+    const field = effectiveInkSide === 'left' ? 'leftInk' : 'rightInk';
+    const currentSerialized = cur[field] ?? '';
+    const prevSerialized = undoStack.pop() ?? '';
+    const redoStack = redoStacksRef.current.get(key) ?? [];
+    redoStack.push(currentSerialized);
+    if (redoStack.length > 40) redoStack.shift();
+    redoStacksRef.current.set(key, redoStack);
+    setHistoryTick((n) => n + 1);
+
+    updateSpread(currentIndex, { [field]: prevSerialized });
+  }, [currentIndex, effectiveInkSide, updateSpread]);
+
+  const handleRedoInk = useCallback(() => {
+    const cur = spreadsRef.current[currentIndex];
+    if (!cur) return;
+    const key = `${cur.id}:${effectiveInkSide}`;
+    const redoStack = redoStacksRef.current.get(key);
+    if (!redoStack || redoStack.length === 0) return;
+
+    const field = effectiveInkSide === 'left' ? 'leftInk' : 'rightInk';
+    const currentSerialized = cur[field] ?? '';
+    const nextSerialized = redoStack.pop() ?? '';
+    const undoStack = undoStacksRef.current.get(key) ?? [];
+    undoStack.push(currentSerialized);
+    if (undoStack.length > 40) undoStack.shift();
+    undoStacksRef.current.set(key, undoStack);
+    setHistoryTick((n) => n + 1);
+
+    updateSpread(currentIndex, { [field]: nextSerialized });
+  }, [currentIndex, effectiveInkSide, updateSpread]);
+
+  const handleClearActiveInkPage = useCallback(() => {
+    const cur = spreadsRef.current[currentIndex];
+    if (!cur) return;
+    const field = effectiveInkSide === 'left' ? 'leftInk' : 'rightInk';
+    if (!cur[field]) return;
+    handleCommitInk(currentIndex, effectiveInkSide, '');
+  }, [currentIndex, effectiveInkSide, handleCommitInk]);
+
+  useEffect(() => {
+    if (!inkCapacityWarning) return;
+    const timer = window.setTimeout(() => setInkCapacityWarning(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [inkCapacityWarning]);
+
+  const showFloatingInkBar =
+    bookPhase === 'open' &&
+    !showWelcome &&
+    inkToolbarOpen &&
+    !indexModalOpen &&
+    !exportModalOpen &&
+    !accountModalOpen;
 
   return (
     <main className="relative w-screen h-[100dvh] desk-surface flex flex-col items-center justify-center overflow-hidden px-2">
@@ -309,7 +480,51 @@ function JournalWorkspace() {
         onDismissWelcome={handleDismissWelcome}
         onCloseBook={handleCloseBook}
         voiceControl={voiceControl}
+        inkConfig={inkConfig}
+        inkToolbarOpen={inkToolbarOpen}
+        onToggleInkToolbar={handleToggleInkToolbar}
+        onCommitInk={handleCommitInk}
+        onStylusActive={handleStylusActive}
+        onInkCapacityWarning={setInkCapacityWarning}
+        onStageContinuationSpread={stageContinuationSpread}
+        focusRequest={focusRequest}
+        onRequestFocus={handleRequestFocus}
+        onClearFocusRequest={handleClearFocusRequest}
       />
+
+      <InkToolbar
+        isOpen={showFloatingInkBar}
+        isDark={isDark}
+        tool={inkTool}
+        color={inkColor}
+        width={inkWidth}
+        allowTouchDraw={allowTouchDraw}
+        activeSideLabel={effectiveInkSide === 'left' ? 'Left page' : 'Right page'}
+        canUndo={canUndoInk}
+        canRedo={canRedoInk}
+        hasInkOnActivePage={hasInkOnActivePage}
+        onSelectTool={setInkTool}
+        onSelectColor={setInkColor}
+        onSelectWidth={setInkWidth}
+        onToggleTouchDraw={() => setAllowTouchDraw((prev) => !prev)}
+        onUndo={handleUndoInk}
+        onRedo={handleRedoInk}
+        onClearPage={handleClearActiveInkPage}
+        onClose={() => setInkToolbarOpen(false)}
+      />
+
+      {inkCapacityWarning ? (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md flex items-center gap-2 text-xs text-[#732323] dark:text-[#f0a8a3] bg-[#faf6ed]/95 dark:bg-[#2a1919]/95 border border-[#8c2d2d]/30 dark:border-[#b84a45]/45 rounded px-3.5 py-2 shadow-sm">
+          <span>{inkCapacityWarning}</span>
+          <button
+            type="button"
+            onClick={() => setInkCapacityWarning(null)}
+            className="underline cursor-pointer shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
 
       {/* Quiet fixed-height prompt & optional Google Sign-In visible only when closed */}
       <div
@@ -401,6 +616,34 @@ function JournalWorkspace() {
         onClearAuthError={clearAuthError}
         onClose={() => setAccountModalOpen(false)}
       />
+
+      {isLandscapeMobile && !landscapeHintDismissed ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="portrait-lock-heading"
+          className="fixed inset-0 z-50 bg-[#1a140f]/75 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
+        >
+          <div className="paper-grain rounded-xl border border-[#8c7960]/35 dark:border-[#4b4238] max-w-sm w-full p-6 text-center shadow-2xl">
+            <h2
+              id="portrait-lock-heading"
+              className="font-serif text-xl font-semibold text-[#261f19] dark:text-[#ece3d4]"
+            >
+              Rotate to portrait orientation
+            </h2>
+            <p className="mt-2 text-xs leading-relaxed text-[#6d5d4b] dark:text-[#b5a795]">
+              Folio keeps its upright notebook layout on mobile so pages stay tall and comfortable to read and write.
+            </p>
+            <button
+              type="button"
+              onClick={() => setLandscapeHintDismissed(true)}
+              className="mt-4 px-4 py-2 text-xs font-medium rounded border border-[#8c7960]/35 dark:border-[#4b4238] text-[#3a231c] dark:text-[#ece3d4] hover:bg-[#efe6d6] dark:hover:bg-[#2a241f] transition-colors cursor-pointer"
+            >
+              Continue anyway
+            </button>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
