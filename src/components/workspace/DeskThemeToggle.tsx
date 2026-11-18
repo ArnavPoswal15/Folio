@@ -6,6 +6,8 @@ interface DeskThemeToggleProps {
   visible: boolean;
   isDark: boolean;
   onToggle: () => void;
+  /** When true, hide the fixed desk toggle (shown in the closed-book prompt instead). */
+  hideOnMobile?: boolean;
 }
 
 /**
@@ -17,11 +19,12 @@ export const DeskThemeToggle: React.FC<DeskThemeToggleProps> = ({
   visible,
   isDark,
   onToggle,
+  hideOnMobile = false,
 }) => (
   <div
     className={`fixed top-4 right-5 z-30 transition-opacity duration-300 ${
-      visible ? 'opacity-100' : 'opacity-0 pointer-events-none'
-    }`}
+      hideOnMobile ? 'max-md:hidden' : ''
+    } ${visible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
   >
     <button
       type="button"

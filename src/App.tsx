@@ -58,6 +58,7 @@ function JournalWorkspace() {
         visible={bookPhase === 'closed'}
         isDark={isDark}
         onToggle={toggleTheme}
+        hideOnMobile={metrics.isMobile}
       />
 
       <PageCurlStage
@@ -131,6 +132,8 @@ function JournalWorkspace() {
         userEmail={authState.user?.email ?? null}
         authBusy={authState.authBusy}
         authError={authState.authError}
+        isDark={isDark}
+        onToggleTheme={toggleTheme}
         onSignInWithGoogle={() => void authState.signInWithGoogle()}
         onSignOut={() => void handleSignOut()}
         onClearAuthError={authState.clearAuthError}

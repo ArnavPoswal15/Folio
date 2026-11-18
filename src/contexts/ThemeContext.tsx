@@ -32,14 +32,11 @@ const ThemeContext = createContext<ThemeContextValue>({
 });
 
 /**
- * Resolves the initial theme from DOM class, localStorage, or OS preference.
+ * Resolves the initial theme from localStorage, defaulting to light when unset.
  * @returns Initial `'light'` or `'dark'` theme mode.
  */
 function getInitialTheme(): ThemeMode {
-  if (typeof document !== 'undefined') {
-    if (document.documentElement.classList.contains('dark')) {
-      return 'dark';
-    }
+  if (typeof window !== 'undefined') {
     try {
       const saved = window.localStorage.getItem(JOURNAL_STORAGE_KEYS.THEME);
       if (saved === 'dark' || saved === 'light') {
@@ -47,12 +44,6 @@ function getInitialTheme(): ThemeMode {
       }
     } catch {
       // Ignore storage access errors
-    }
-    if (
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-color-scheme: dark)').matches
-    ) {
-      return 'dark';
     }
   }
   return 'light';
@@ -77,7 +68,7 @@ function getInitialFont(): JournalFontId {
 }
 
 /**
- * Provides theme state, OS color-scheme synchronization, and journal font selection to the app tree.
+ * Provides theme state and journal font selection to the app tree.
  * @param props - Children elements wrapped by the theme provider.
  * @returns ThemeContext provider wrapping child nodes.
  */
@@ -91,22 +82,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = (e: MediaQueryListEvent) => {
-      try {
-        const saved = window.localStorage.getItem(JOURNAL_STORAGE_KEYS.THEME);
-        if (saved === 'light' || saved === 'dark') return;
-      } catch {
-        // Ignore storage access errors
-      }
-      setThemeState(e.matches ? 'dark' : 'light');
-    };
-    media.addEventListener('change', onChange);
-    return () => media.removeEventListener('change', onChange);
-  }, []);
 
   const setTheme = useCallback((next: ThemeMode) => {
     setThemeState(next);

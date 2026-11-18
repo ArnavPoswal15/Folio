@@ -1,3 +1,4 @@
+import { Moon, Sun } from 'lucide-react';
 import React from 'react';
 
 /** Props accepted by the ClosedBookPrompt component. */
@@ -7,6 +8,8 @@ interface ClosedBookPromptProps {
   userEmail: string | null;
   authBusy: boolean;
   authError: string | null;
+  isDark: boolean;
+  onToggleTheme: () => void;
   onSignInWithGoogle: () => void;
   onSignOut: () => void;
   onClearAuthError: () => void;
@@ -23,19 +26,43 @@ export const ClosedBookPrompt: React.FC<ClosedBookPromptProps> = ({
   userEmail,
   authBusy,
   authError,
+  isDark,
+  onToggleTheme,
   onSignInWithGoogle,
   onSignOut,
   onClearAuthError,
 }) => (
   <>
     <div
-      className={`mt-5 h-12 flex flex-col items-center justify-center gap-1 px-4 text-center transition-opacity duration-500 ${
+      className={`mt-5 min-h-12 flex flex-col items-center justify-center gap-1 px-4 text-center transition-opacity duration-500 ${
         visible ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}
     >
-      <p className="text-sm tracking-wide font-serif italic text-[#5c4f41] dark:text-[#b2a390] opacity-85">
-        Click the book to open
-      </p>
+      <div className="relative w-full max-w-sm flex items-center justify-center px-10">
+        <p className="text-sm tracking-wide font-serif italic text-[#5c4f41] dark:text-[#b2a390] opacity-85">
+          Click the book to open
+        </p>
+        <button
+          type="button"
+          disabled={!visible}
+          onClick={onToggleTheme}
+          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="md:hidden absolute right-0 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 px-2 py-1.5 rounded border border-[#8c7960]/30 dark:border-[#4b4238] bg-[#faf6ed]/75 dark:bg-[#1f1c19]/85 text-[11px] text-[#4a3d30] dark:text-[#d5c8b6] transition-colors cursor-pointer shrink-0 min-h-[32px] backdrop-blur-[2px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#57361e] dark:focus-visible:ring-[#deb488]"
+        >
+          {isDark ? (
+            <>
+              <Sun className="w-3 h-3" strokeWidth={1.75} />
+              <span>Light</span>
+            </>
+          ) : (
+            <>
+              <Moon className="w-3 h-3" strokeWidth={1.75} />
+              <span>Dark</span>
+            </>
+          )}
+        </button>
+      </div>
 
       {authReady ? (
         userEmail ? (
