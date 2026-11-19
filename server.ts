@@ -31,6 +31,23 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/** Microsoft Clarity project ID (public; not an API secret). */
+function resolveClarityProjectId(): string {
+  const fromEnv =
+    process.env.VITE_CLARITY_PROJECT_ID?.trim() ||
+    process.env.CLARITY_PROJECT_ID?.trim() ||
+    '';
+  return fromEnv;
+}
+
+function injectClarityProjectId(html: string, projectId: string): string {
+  if (!projectId) return html;
+  return html.replace(
+    /var clarityProjectId = ('[^']*'|"[^"]*");/,
+    `var clarityProjectId = ${JSON.stringify(projectId)};`
+  );
+}
+
 const PORT = parsePositiveInt(process.env.PORT, 3000);
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
@@ -1134,14 +1151,22 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distDir = path.resolve(__dirname, 'dist');
+    const indexPath = path.join(distDir, 'index.html');
+    const clarityProjectId = resolveClarityProjectId();
+    const cachedIndexHtml = fs.existsSync(indexPath)
+      ? injectClarityProjectId(
+          fs.readFileSync(indexPath, 'utf8'),
+          clarityProjectId
+        )
+      : null;
+
     app.use(express.static(distDir));
     app.get('*', (_req, res) => {
-      const indexPath = path.join(distDir, 'index.html');
-      if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-      } else {
-        res.status(404).send('Build output not found.');
+      if (cachedIndexHtml) {
+        res.type('html').send(cachedIndexHtml);
+        return;
       }
+      res.status(404).send('Build output not found.');
     });
   }
 
@@ -1153,6 +1178,14 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Folio server running on http://0.0.0.0:${PORT}`);
+    if (IS_PRODUCTION) {
+      const clarityId = resolveClarityProjectId();
+      console.log(
+        clarityId
+          ? 'Microsoft Clarity: enabled for this deployment.'
+          : 'Microsoft Clarity: disabled (set VITE_CLARITY_PROJECT_ID or CLARITY_PROJECT_ID).'
+      );
+    }
   });
 }
 
