@@ -15,6 +15,7 @@ interface PageCompactHeaderProps {
   interactive: boolean;
   locked: boolean;
   isSignedIn: boolean;
+  showPageChrome?: boolean;
   inkToolbarOpen: boolean;
   actionsMenuOpen: boolean;
   voiceControl?: VoiceControl;
@@ -41,6 +42,7 @@ export const PageCompactHeader: React.FC<PageCompactHeaderProps> = ({
   interactive,
   locked,
   isSignedIn,
+  showPageChrome = false,
   inkToolbarOpen,
   actionsMenuOpen,
   voiceControl,
@@ -52,25 +54,35 @@ export const PageCompactHeader: React.FC<PageCompactHeaderProps> = ({
   onCloseBook,
   onActionsMenuOpenChange,
 }) => {
+  const drawToggleClass = `inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11.5px] sm:text-[12px] whitespace-nowrap shrink-0 ${
+    inkToolbarOpen
+      ? 'bg-[#3a231c] dark:bg-[#deb488] text-[#faf6ed] dark:text-[#1b1511] font-medium'
+      : 'text-[#847461] dark:text-[#9f917f]'
+  }`;
+
   const drawToggle =
-    interactive &&
-    onToggleInkToolbar && (
+    interactive && onToggleInkToolbar ? (
       <button
         type="button"
         disabled={locked}
         aria-pressed={inkToolbarOpen}
         onClick={() => onToggleInkToolbar(side)}
         title="Open Apple Pencil & drawing tools (Apple Pencil also writes anytime)"
-        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11.5px] sm:text-[12px] transition-colors cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#57361e] dark:focus-visible:ring-[#deb488] ${
+        className={`${drawToggleClass} transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#57361e] dark:focus-visible:ring-[#deb488] ${
           inkToolbarOpen
-            ? 'bg-[#3a231c] dark:bg-[#deb488] text-[#faf6ed] dark:text-[#1b1511] font-medium'
-            : 'text-[#847461] dark:text-[#9f917f] hover:text-[#261f19] dark:hover:text-[#ece3d4]'
+            ? ''
+            : 'hover:text-[#261f19] dark:hover:text-[#ece3d4]'
         }`}
       >
         <PenTool className="w-3 h-3 opacity-80" strokeWidth={1.7} />
         <span>Draw</span>
       </button>
-    );
+    ) : showPageChrome ? (
+      <span aria-hidden="true" className={drawToggleClass}>
+        <PenTool className="w-3 h-3 opacity-80" strokeWidth={1.7} />
+        <span>Draw</span>
+      </span>
+    ) : null;
 
   const actionsRow = (
     <PageActionsMenu
@@ -103,12 +115,13 @@ export const PageCompactHeader: React.FC<PageCompactHeaderProps> = ({
             </span>
             {actionsRow}
           </div>
-          {interactive && (
+          {(interactive || showPageChrome) && (
             <div className="mt-2 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 {drawToggle}
                 <PageVoiceControls
                   interactive={interactive}
+                  showPageChrome={showPageChrome}
                   locked={locked}
                   spreadIndex={spreadIndex}
                   side={side}
@@ -124,6 +137,7 @@ export const PageCompactHeader: React.FC<PageCompactHeaderProps> = ({
             {drawToggle}
             <PageVoiceControls
               interactive={interactive}
+              showPageChrome={showPageChrome}
               locked={locked}
               spreadIndex={spreadIndex}
               side="left"
@@ -140,6 +154,7 @@ export const PageCompactHeader: React.FC<PageCompactHeaderProps> = ({
             {drawToggle}
             <PageVoiceControls
               interactive={interactive}
+              showPageChrome={showPageChrome}
               locked={locked}
               spreadIndex={spreadIndex}
               side="right"

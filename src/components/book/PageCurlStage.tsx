@@ -46,6 +46,7 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
   voiceControl,
   inkConfig,
   inkToolbarOpen = false,
+  inkToolbarSide,
   onToggleInkToolbar,
   onCommitInk,
   onStylusActive,
@@ -241,6 +242,10 @@ export const PageCurlStage: React.FC<PageCurlStageProps> = ({
         isMobile={isMobile}
         isDark={isDark}
         isSignedIn={isSignedIn}
+        voiceControl={voiceControl}
+        inkConfig={inkConfig}
+        inkToolbarOpen={inkToolbarOpen}
+        inkToolbarSide={inkToolbarSide}
         nextReveal={nextReveal}
         prevReveal={prevReveal}
         flapBack={flapBack}

@@ -6,6 +6,7 @@ import { formatElapsed } from '../../utils/voice';
 /** Props accepted by the PageVoiceControls status button and meter component. */
 interface PageVoiceControlsProps {
   interactive: boolean;
+  showPageChrome?: boolean;
   locked: boolean;
   spreadIndex: number;
   side: 'left' | 'right';
@@ -29,6 +30,7 @@ interface PageVoiceErrorBannerProps {
  */
 export const PageVoiceControls: React.FC<PageVoiceControlsProps> = ({
   interactive,
+  showPageChrome = false,
   locked,
   spreadIndex,
   side,
@@ -72,7 +74,7 @@ export const PageVoiceControls: React.FC<PageVoiceControlsProps> = ({
     });
   }, [isThisPageRecording, voiceControl]);
 
-  if (!interactive || !voiceControl) return null;
+  if ((!interactive && !showPageChrome) || !voiceControl) return null;
 
   if (isThisPageRecording) {
     return (
@@ -131,6 +133,24 @@ export const PageVoiceControls: React.FC<PageVoiceControlsProps> = ({
     );
   }
 
+  const recordLabel = (
+    <>
+      <Mic className="w-3 h-3 opacity-75" strokeWidth={1.65} />
+      <span>Record</span>
+    </>
+  );
+
+  if (showPageChrome && !interactive) {
+    return (
+      <span
+        aria-hidden="true"
+        className="inline-flex items-center gap-1 py-0.5 text-[11.5px] sm:text-[12px] text-[#847461] dark:text-[#9f917f] whitespace-nowrap shrink-0"
+      >
+        {recordLabel}
+      </span>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -139,8 +159,7 @@ export const PageVoiceControls: React.FC<PageVoiceControlsProps> = ({
       title="Record voice into this page"
       className="inline-flex items-center gap-1 py-0.5 text-[11.5px] sm:text-[12px] text-[#847461] dark:text-[#9f917f] hover:text-[#261f19] dark:hover:text-[#ece3d4] transition-colors cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:underline"
     >
-      <Mic className="w-3 h-3 opacity-75" strokeWidth={1.65} />
-      <span>Record</span>
+      {recordLabel}
     </button>
   );
 };

@@ -49,6 +49,8 @@ export interface JournalPageContentProps {
   canTurnPrev?: boolean;
   canTurnNext?: boolean;
   showEmptyPlaceholders?: boolean;
+  /** Renders Draw/Record and page placeholders while pointer events stay disabled (e.g. curl reveal). */
+  showPageChrome?: boolean;
   showCornerSheen?: boolean;
   voiceControl?: VoiceControl;
   onMenuOpenChange?: (open: boolean) => void;

@@ -58,6 +58,7 @@ export interface PageCurlStageProps {
   voiceControl?: VoiceControl;
   inkConfig?: InkToolConfig;
   inkToolbarOpen?: boolean;
+  inkToolbarSide?: 'left' | 'right';
   onToggleInkToolbar?: (side: 'left' | 'right') => void;
   onCommitInk?: (
     spreadIndex: number,

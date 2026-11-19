@@ -90,6 +90,7 @@ function JournalWorkspace() {
         voiceControl={voiceControl}
         inkConfig={ink.inkConfig}
         inkToolbarOpen={ink.inkToolbarOpen}
+        inkToolbarSide={ink.effectiveInkSide}
         onToggleInkToolbar={ink.handleToggleInkToolbar}
         onCommitInk={ink.handleCommitInk}
         onStylusActive={ink.handleStylusActive}

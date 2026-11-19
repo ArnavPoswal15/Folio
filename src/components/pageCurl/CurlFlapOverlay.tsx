@@ -1,5 +1,7 @@
 import React from 'react';
+import { InkToolConfig } from '../../types/ink';
 import { CurlGeometry, CurlPageDescriptor } from '../../types/pageCurl';
+import { VoiceControl } from '../../types/voice';
 import { JournalPageContent } from '../journalPage/JournalPageContent';
 
 /** Props accepted by the CurlFlapOverlay component. */
@@ -10,9 +12,51 @@ interface CurlFlapOverlayProps {
   isMobile: boolean;
   isDark: boolean;
   isSignedIn: boolean;
+  voiceControl?: VoiceControl;
+  inkConfig?: InkToolConfig;
+  inkToolbarOpen?: boolean;
+  inkToolbarSide?: 'left' | 'right';
   nextReveal: CurlPageDescriptor | null;
   prevReveal: CurlPageDescriptor | null;
   flapBack: CurlPageDescriptor | null;
+}
+
+function renderCurlPagePreview(
+  descriptor: CurlPageDescriptor,
+  pageW: number,
+  pageH: number,
+  isMobile: boolean,
+  isSignedIn: boolean,
+  voiceControl: VoiceControl | undefined,
+  inkConfig: InkToolConfig | undefined,
+  inkToolbarOpen: boolean,
+  inkToolbarSide: 'left' | 'right' | undefined
+) {
+  const drawArmedOnThisPage = Boolean(
+    inkToolbarOpen &&
+      inkConfig?.drawArmed &&
+      inkToolbarSide === descriptor.side
+  );
+
+  return (
+    <JournalPageContent
+      spread={descriptor.spread}
+      side={descriptor.side}
+      spreadIndex={descriptor.spreadIndex}
+      pageW={pageW}
+      pageH={pageH}
+      isMobile={isMobile}
+      isContinuation={descriptor.isContinuation}
+      interactive={false}
+      isSignedIn={isSignedIn}
+      showEmptyPlaceholders={true}
+      showPageChrome={true}
+      showCornerSheen={true}
+      voiceControl={voiceControl}
+      inkConfig={inkConfig}
+      inkToolbarOpen={drawArmedOnThisPage}
+    />
+  );
 }
 
 /**
@@ -72,6 +116,10 @@ export const CurlFlapOverlay: React.FC<CurlFlapOverlayProps> = ({
   isMobile,
   isDark,
   isSignedIn,
+  voiceControl,
+  inkConfig,
+  inkToolbarOpen = false,
+  inkToolbarSide,
   nextReveal,
   prevReveal,
   flapBack,
@@ -93,17 +141,17 @@ export const CurlFlapOverlay: React.FC<CurlFlapOverlayProps> = ({
             clipPath: curl.underneathClip,
           }}
         >
-          <JournalPageContent
-            spread={nextReveal.spread}
-            side={nextReveal.side}
-            spreadIndex={nextReveal.spreadIndex}
-            pageW={pageW}
-            pageH={pageH}
-            isMobile={isMobile}
-            isContinuation={nextReveal.isContinuation}
-            isSignedIn={isSignedIn}
-            interactive={false}
-          />
+          {renderCurlPagePreview(
+            nextReveal,
+            pageW,
+            pageH,
+            isMobile,
+            isSignedIn,
+            voiceControl,
+            inkConfig,
+            inkToolbarOpen,
+            inkToolbarSide
+          )}
           <FoldCreaseShadow
             curl={curl}
             pageW={pageW}
@@ -123,17 +171,17 @@ export const CurlFlapOverlay: React.FC<CurlFlapOverlayProps> = ({
             clipPath: curl.underneathClip,
           }}
         >
-          <JournalPageContent
-            spread={prevReveal.spread}
-            side={prevReveal.side}
-            spreadIndex={prevReveal.spreadIndex}
-            pageW={pageW}
-            pageH={pageH}
-            isMobile={isMobile}
-            isContinuation={prevReveal.isContinuation}
-            isSignedIn={isSignedIn}
-            interactive={false}
-          />
+          {renderCurlPagePreview(
+            prevReveal,
+            pageW,
+            pageH,
+            isMobile,
+            isSignedIn,
+            voiceControl,
+            inkConfig,
+            inkToolbarOpen,
+            inkToolbarSide
+          )}
           <FoldCreaseShadow
             curl={curl}
             pageW={pageW}
@@ -178,19 +226,18 @@ export const CurlFlapOverlay: React.FC<CurlFlapOverlayProps> = ({
               boxShadow: '0 0 1px rgba(80, 62, 42, 0.35)',
             }}
           >
-            {flapBack && (
-              <JournalPageContent
-                spread={flapBack.spread}
-                side={flapBack.side}
-                spreadIndex={flapBack.spreadIndex}
-                pageW={pageW}
-                pageH={pageH}
-                isMobile={isMobile}
-                isContinuation={flapBack.isContinuation}
-                isSignedIn={isSignedIn}
-                interactive={false}
-              />
-            )}
+            {flapBack &&
+              renderCurlPagePreview(
+                flapBack,
+                pageW,
+                pageH,
+                isMobile,
+                isSignedIn,
+                voiceControl,
+                inkConfig,
+                inkToolbarOpen,
+                inkToolbarSide
+              )}
           </div>
 
           <div
